@@ -1,0 +1,44 @@
+---
+title: "Shrimp modeling"
+output: html_notebook
+---
+
+I got a little confused and talked to Christine. She thought the model basically sounded like a stock assessment and thought I should just use SS. I wonder if I am missing something or didn't communicate what data we have? The growth part is easy, but I'm not sure how to integrate it into the abundance part. Is there a paper or book that describes the type of model you are thinking of?
+
+Without loss of generality, assume error terms, lengths, numbers, and catches all have an additional subscript denoting the area.
+
+## Data:
+Data we have at month-year-fishing area resolution:
+
+* Average length, SD of length, and sample size, for each age class
+* Total catch in lbs
+* Count per pound
+* Percent age composition of the catch by number
+
+## Biological model:
+$L_{a,y,m}$ is length of age $a$ shrimp in month $m$ of year $y$. Then
+
+$$\begin{aligned}
+L_{1,y,1} &= \alpha_0 + \epsilon_{1,y,1} \\
+L_{a,y,m} &= \alpha_1 + \beta_1 L_{a,y,m-1} + \epsilon_{a,y,m} \\
+L_{a,y,1} &= \alpha_2 + \beta_2 L_{a-1, y-1, m_{\max}} + \epsilon_{a,y,1}
+\end{aligned}$$
+
+$\alpha_0$ is average size at recruitment to the fishery, $\alpha_1$ and $\beta_1$ describe within fishing season growth, and $\alpha_2$ and $\beta_2$ describe across fishing season growth. All of these can be functions of environmental variables. There is also an existing theory that growth is density-dependent, so they grow less when there are more shrimp around. The process variability $\epsilon$ will follow a normal distribution. Could be AR1? Could estimate unique distribution for each of these three equations, too?
+
+$N_{a,y,m}$ is the number of age $a$ shrimp in month $m$ of year $y$. Then
+
+$$\begin{aligned}
+N_{1,y,1} &= \exp(f(\text{covariates}) + \delta_{y}) \\
+N_{a,y,m} &= N_{a,y,m-1}\exp(-M) - C_{a,y,m} * \text{count per pound} \\
+N_{a,y,1} &= N_{a-1, y-1, m_\max} \exp(-M_\text{winter})
+\end{aligned}$$
+
+$\delta$ will follow a normal distribution. Probably the easiest thing to do is assume natural mortality is equal every month and divide the annual rate from the VPA into the 12 months of the year. (Note: this is probably wrong.) How do I calculate $C_{a,y,m}$ from $C_{y,m}$? Also, how do I use the Baranov catch equation to make it so fishing and natural mortality occur simultaneously? Doesn't that require numerical solving? Christine pointed out that using count per pound means I can't project in years we don't have count per pound data. 
+
+## Observation model:
+
+$$\bar{L}_{a,y,m} \sim N\left(L_{a,y,m}, \frac{\hat{\sigma}_{L,a,y,m}}{\sqrt{n_{a,y,m}}} \right) $$
+
+where $\bar{L}_{a,y,m}$ is the empirical mean length for age $a$ in month $m$ of year $y$, $\hat{\sigma}_{L,a,y,m}$ is the empirical standard deviation of length of age $a$ shrimp in month $m$ of year $y$, and $n_{a,y,m}$ is the number of age $a$ shrimp that were sampled from the catch in month $m$ of year $y$. I think this approch of using the observed $\sigma$ in this distribution is referred to as "empirical bayes" and we could actually estimate the true $\sigma$ itself if we want. I think $n$ tends to be large enough (dozens if not 100s for ages 1 and 2, age 3+ sampling is worse because it is not a large portion of the population) that this won't be worth the effort.
+
