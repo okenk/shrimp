@@ -2,8 +2,8 @@
 // Downloaded 3/21/19.
 
 data {
-  int<lower=0> N;
-  int<lower=0> M;
+  int<lower=0> N; // number of time steps in a time series
+  int<lower=0> M; // number of observed time series
   int<lower=0> states[M]; // vector assigning time series to states
   int<lower=0> S; // number of states
   // int<lower=0> obsVariances[M];
@@ -22,7 +22,7 @@ data {
 }
 parameters {
   real x0_mean;
-  real x0_sd;
+  real<lower = 0> x0_sd;
   vector[S] x0; // initial states
   vector[S] pro_dev[N-1];
   real U;
@@ -50,7 +50,8 @@ model {
   x0_mean ~ normal(0.0, 10.0);
   x0_sd ~ cauchy(0.0, 5.0);
   x0 ~ normal(x0_mean, x0_sd);
-  sigma_obs ~ gamma(0.982^2/.025, 0.982/.025); // mean = .982 (weighted avg of popn SD), sd = .5
+  sigma_obs ~ cauchy(0.0, 5.0);
+  // sigma_obs ~ gamma(0.982^2/.025, 0.982/.025); // mean = .982 (weighted avg of popn SD), sd = .5
   sigma_process ~ cauchy(0.0, 5.0);
   U ~ normal(0.0,1.0);
   // B ~ normal(0.75, 1.0);
@@ -63,15 +64,19 @@ model {
 
   // likelihood
   for(i in 1:n_pos) {
-    y[i] ~ normal(pred[col_indx_pos[i], row_indx_pos[i]], sigma_obs/sqrt(samp_size[i]));
-                  // sigma_obs[obsVariances[row_indx_pos[i]]])/sqrt(samp_size[i]));
+    y[i] ~ normal(pred[col_indx_pos[i], row_indx_pos[i]], sigma_obs/sqrt(samp_size[i])); 
+    // this order is correct even if unintuitive
   }
 }
-// generated quantities {
-//   vector[n_pos] log_lik;
-//   // regresssion example in loo() package
-//   for (n in 1:n_pos) {
-//     log_lik[n] = normal_lpdf(y[n] | pred[col_indx_pos[n], row_indx_pos[n]],
-//                              sigma_obs[obsVariances[row_indx_pos[n]]]/sqrt(samp_size[n]));
-//   }
-// }
+generated quantities {
+  vector[n_pos] pred_vec;
+  for(i in 1:n_pos) {
+    pred_vec[i] = pred[col_indx_pos[i], row_indx_pos[i]];
+  }
+  // vector[n_pos] log_lik;
+  // // regresssion example in loo() package
+  // for (n in 1:n_pos) {
+  //   log_lik[n] = normal_lpdf(y[n] | pred[col_indx_pos[n], row_indx_pos[n]],
+  //                            sigma_obs[obsVariances[row_indx_pos[n]]]/sqrt(samp_size[n]));
+  // }
+}
