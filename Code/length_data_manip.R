@@ -128,6 +128,7 @@ tibble(med.pred, MeanLength = ordered.y)[order(complete.data.mat[,1]),] %>%
   summarize(n = n()) %>% 
   arrange(desc(n))
 
+save('med.pred', 'mod', file = 'Code/model_output.RData')
 filter(lengths, AgeClass > 0)  %>%
   ggplot(aes(x = MonthNum, y = MeanLength, group = paste(Fyear, Area), col = factor(Area))) +
   geom_path() +
@@ -153,4 +154,4 @@ filter(lengths, AgeClass > 0, !is.na(MeanLength)) %>%
   facet_wrap(~Area) +
   NULL
 
-
+summary(mod, pars = c('x0_mean', 'x0_sd', 'U', 'sigma_process', 'sigma_obs'))$summary
