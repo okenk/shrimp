@@ -5,7 +5,8 @@ data {
   int<lower=0> N; // number of time steps in a time series
   int<lower=0> M; // number of observed time series
   int<lower=0> states[M]; // vector assigning time series to states
-  int<lower=0> S; // number of states
+  int<lower=0> S; // number of states (cohorts)
+  int<lower=0> n_area; // number of areas
   // int<lower=0> obsVariances[M];
   // int<lower=0> n_obsvar;
   // int<lower=0> proVariances[S+1];
@@ -17,14 +18,18 @@ data {
   int<lower=0> row_indx_pos[n_pos];
   vector[n_pos] y; // data
   vector[n_pos] samp_size; // number of measurements going into each mean length
-  int y_int[n_pos];
+  int area[n_pos];
+  int<lower=0, upper=1> return_preds;
+  int<lower=0, upper=1> calc_ppd;
   // int family; // 1 = normal, 2 = binomial, 3 = poisson, 4 = gamma, 5 = lognormal
 }
 parameters {
   real x0_mean;
-  real<lower = 0> x0_sd;
+  real<lower=0> sigma_x0;
   vector[S] x0; // initial states
   vector[S] pro_dev[N-1];
+  vector[n_area] area_offset;
+  real<lower=0> sigma_area;
   real U;
   real B;
   // vector[n_trends] U;
@@ -33,12 +38,11 @@ parameters {
 }
 transformed parameters {
   vector[M] pred[N];
-  vector[S] x[N]; // elements accessed [N,K]
-  // random walk in states
+  vector[S] x[N]; // elements accessed [N,S]
+  // AR(1) process in states
    x[1,] = x0; // initial state, vague prior below
    for(t in 2:N) {
-    x[t,] = x[t-1,] + U + pro_dev[t-1,];
-    // x[t,s] = x[t-1,s] + U[trends[s]] + pro_dev[t-1,s];
+    x[t,] = B*x[t-1,] + U + pro_dev[t-1,];
    }
 
   // map predicted states to time series
@@ -48,12 +52,16 @@ transformed parameters {
 }
 model {
   x0_mean ~ normal(0.0, 10.0);
-  x0_sd ~ cauchy(0.0, 5.0);
-  x0 ~ normal(x0_mean, x0_sd);
+  sigma_x0 ~ cauchy(0.0, 5.0);
+  x0 ~ normal(x0_mean, sigma_x0);
+  
+  sigma_area ~ cauchy(0.0, 5.0);
+  area_offset ~ normal(0, sigma_area);
+  
   sigma_obs ~ cauchy(0.0, 5.0);
-  // sigma_obs ~ gamma(0.982^2/.025, 0.982/.025); // mean = .982 (weighted avg of popn SD), sd = .5
   sigma_process ~ cauchy(0.0, 5.0);
   U ~ normal(0.0,1.0);
+  B ~ normal(0.0,1.0);
   // B ~ normal(0.75, 1.0);
   for(i in 1:(N-1)){
     pro_dev[i] ~ normal(0.0, sigma_process);
@@ -64,14 +72,41 @@ model {
 
   // likelihood
   for(i in 1:n_pos) {
-    y[i] ~ normal(pred[col_indx_pos[i], row_indx_pos[i]], sigma_obs/sqrt(samp_size[i])); 
+    y[i] ~ normal(pred[col_indx_pos[i], row_indx_pos[i]] + area_offset[area[i]], sigma_obs);///sqrt(samp_size[i])); 
     // this order is correct even if unintuitive
   }
 }
 generated quantities {
   vector[n_pos] pred_vec;
-  for(i in 1:n_pos) {
-    pred_vec[i] = pred[col_indx_pos[i], row_indx_pos[i]];
+  vector[M] pred_sim[N];
+  vector[S] x_sim[N]; // elements accessed [N,S]
+  vector[n_pos] y_pp;
+  
+  if(return_preds == 1) {
+    for(i in 1:n_pos) {
+      pred_vec[i] = pred[col_indx_pos[i], row_indx_pos[i]];
+    }
+  }
+  
+  // posterior predictive checks
+  if(calc_ppd == 1) {
+    for(s in 1:S) {
+      x_sim[1,s] = normal_rng(x0_mean, sigma_x0); 
+    }
+    for(s in 1:S) {
+      for(t in 2:N) {
+        x_sim[t,s] = normal_rng(B*x_sim[t-1,s] + U, sigma_process);
+      }
+    }
+    for(n in 1:N) {
+      for(m in 1:M) {
+        pred_sim[n,m] = x_sim[n,states[m]];
+      }
+    }
+    for(i in 1:n_pos) {
+      y_pp[i]  = normal_rng(pred_sim[col_indx_pos[i], row_indx_pos[i]] + area_offset[area[i]], 
+                            sigma_obs);///sqrt(samp_size[i])); 
+    }
   }
   // vector[n_pos] log_lik;
   // // regresssion example in loo() package
