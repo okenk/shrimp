@@ -19,6 +19,8 @@ data {
   int<lower=0> col_indx_pos[n_pos];
   int<lower=0> row_indx_pos[n_pos];
   vector[n_pos] y; // data
+  vector[M] bio[N];
+  vector[M] ssh[N];
   // int<lower=0> area[n_pos];
   int<lower=0, upper=1> calc_ppd;
   // int family; // 1 = normal, 2 = binomial, 3 = poisson, 4 = gamma, 5 = lognormal
@@ -39,6 +41,8 @@ parameters {
   real<lower=0> sigma_area;
   real U;
   real U_season;
+  real U_bio;
+  real U_ssh;
   real<lower=0, upper=1> B;
   real<lower=0> sigma_process;//[S];
   real<lower=0> sigma_obs;//[n_obsvar];
@@ -50,7 +54,7 @@ transformed parameters {
   for(m in 1:M) {
     x[1,m] = x0[cohorts[m]] + area_offset[area[m]]; // initial state, vague prior below
     for(t in 2:N) {
-      x[t,m] = B*x[t-1,m] + U_season *  seasons[t-1] + U + pro_dev[t-1,cohorts[m]];
+      x[t,m] = B*x[t-1,m] + U_season*seasons[t-1] + U + pro_dev[t-1,cohorts[m]];
     }
   }
   
@@ -73,6 +77,8 @@ model {
   
   U ~ normal(0.0,1.0);
   U_season ~ normal(0.0,1.0);
+  U_bio ~ normal(0.0,1.0);
+  U_ssh ~ normal(0.0,1.0);
   B ~ beta(2,2);
   // B ~ normal(0.75, 1.0);
   for(i in 1:(N-1)){
