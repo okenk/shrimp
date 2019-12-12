@@ -3,14 +3,8 @@ library(tidyverse)
 library(rstan)
 library(shinystan)
 
-# Deprecated
-# age.comp <- read_excel('Data/AGETAB2000.xls', range = 'A4:I81', na = '--') %>%
-#   filter(!is.na(Age)) %>% # remove blank rows
-#   rename(State_Area = `State Area`) %>%
-#   mutate(State_Area = rep(as.vector(na.omit(State_Area)), each = 6)) %>%
-#   gather(key = 'Month', value = 'value', -State_Area, -Age) %>%
-#   spread(key = Age, value = value) %>%
-#   gather(key = 'Age', value = 'Pct_comp', `0`:`3`, na.rm=TRUE)
+
+# preparing data ----------------------------------------------------------
 
 age_comp <- read_excel('Data/shrimp age comp and count.xlsx') %>%
   gather(key = 'Age', value = 'Pct_Comp', `Age 0`:`Age 3`) %>%
@@ -23,34 +17,16 @@ age_comp <- read_excel('Data/shrimp age comp and count.xlsx') %>%
          Area = as.character(Area),
          N2 = ceiling(N*Pct_Comp))
 
-# Decprecated
-# lengths <- read_excel('Data/shrimp mean carapace length (mm).xlsx') %>%
-#   gather(key = 'AgeClass', value = 'MeanLength', `Age 0`:`Age 3`) %>%
-#   select(-ID) %>%
-#   mutate(AgeClass = as.numeric(gsub('Age ', '', AgeClass))) %>%
-#   right_join(age_comp, by = c('Fyear', 'Area', 'Fmonth', 'AgeClass')) %>%
-#   mutate(MonthNum = sapply(Fmonth, function(x) switch(x, April = 4,
-#                            May = 5,
-#                            June = 6,
-#                            July = 7,
-#                            August = 8,
-#                            September = 9,
-#                            October = 10))) %>%
-#   filter(AgeClass > 0, !is.na(MeanLength))  %>%
-#   bind_rows(indiv_data) %>%
-#   mutate(YearClass = Fyear - AgeClass,
-#          AgeMonth = AgeClass + MonthNum/12)
-biomass <- read_excel('Data/OR-VPE.xlsx') %>%
-  rename('Year' = `Spawn Year`) %>%
-  mutate(log_bio = log(`OR VPE calculated`),
-           std_Log_Biomass = (log_bio - mean(log_bio, na.rm = TRUE))/sd(log_bio, na.rm = TRUE)) %>%
-  select(Year, std_Log_Biomass) %>%
-  filter(!is.na(std_Log_Biomass))
-
 ssh <- read_csv('Data/CC_SSH.csv') %>%
   filter(Month == 4, Year >= 1986) %>% # April SSH, length data starts in 1989 
   mutate(std_MSL = (Monthly_MSL - mean(Monthly_MSL, na.rm = TRUE))/sd(Monthly_MSL, na.rm = TRUE)) %>%
   select(Year, std_MSL) 
+
+biomass <- read_excel('Data/OR-VPE.XLSX') %>%
+  mutate('Year' = `Spawn Year` + 1, # this naming scheme makes no sense to me, but I *think* spawn year + 1 is the year the cohort is age 1.
+         Std_Log_Bio = (`OR log VPE` - mean(`OR log VPE`, na.rm = TRUE))/sd(`OR log VPE`, na.rm = TRUE)) %>%
+  select(Year, Std_Log_Bio, `North Log VPE`, `South Log VPE`) %>%
+  filter(!is.na(Std_Log_Bio))
   
 lengths <- read_csv('Data/Compiled_Lengths.csv', 
                     col_types = 'cdcddddd') %>%
@@ -58,24 +34,27 @@ lengths <- read_csv('Data/Compiled_Lengths.csv',
        Age_Month = Age + Month_Num/12) %>%
   left_join(age_comp[,c('Year', 'Area', 'Month', 'N2', 'Age')]) %>%
   mutate(N = ifelse(is.na(N), N2, N)) %>%
-  filter(!is.na(N), N > 0, Age > 0) %>% 
+  filter(N > 0, Age > 0, !is.na(N)) %>% 
   # I am concerned about the N filtering-- There is an error somewhere and this is a workaround to get code to run,
   # but is not solving the error. Currently excluding 8 rows due to filtering, but others might be wrong.
+  # The issue is that there are a few area-year-month-ages that have an average length, but the
+  # corresponding area-year-month does not have age comp data. Because I am no longer using N for the obs error,
+  # I stopped filtering the NAs in sample size (N) out.
   select(-N2) %>%
   left_join(biomass) %>%
-  mutate(Log_Biomass = ifelse(Area <= 23, `South_Log_VPE`, `North_Log_VPE`),
-         std_Log_Biomass = (Log_Biomass - mean(Log_Biomass, na.rm = TRUE))/sd(Log_Biomass, na.rm = TRUE)) %>%
+  mutate(Log_Bio_Regional = ifelse(Area <= 23, `South Log VPE`, `North Log VPE`),
+         Std_Log_Bio_Regional = (Log_Bio_Regional - mean(Log_Bio_Regional, na.rm = TRUE))/sd(Log_Bio_Regional, na.rm = TRUE)) %>%
   # the VPEs are for OR only, length data include WA and CA! Use N. index for WA and S. index for CA
-  select(-`North_Log_VPE`, -`South_Log_VPE`) %>%
-  left_join(ssh) 
+  select(-`North Log VPE`, -`South Log VPE`, -Log_Bio_Regional) %>%
+  left_join(ssh)
 
 # Setting up for Stan model
 y.df <- lengths %>%
-  select(-(Log_Biomass:std_MSL)) %>%
+  select(-(Std_Log_Bio:std_MSL), -N) %>%
   bind_rows(tibble(Age_Month = c(1+11/12, 2 + c(0, 1/12, 2/12, 3/12, 11/12), 3+c(0, 1/12, 2/12, 3/12)),
                    Year_Class = 2015, Area = as.character(12))) %>% # This adds columns for wintertime months
-  select(-Month, -Age, -Month_Num, -Year, -N, -sd) %>%
-  spread(key = Age_Month, value = Avg_Len)
+  select(-Month, -Age, -Month_Num, -Year, -sd) %>%
+  spread(key = Age_Month, value = Avg_Len) 
 
 y.mat <- y.df %>%
   select(-(Area:Year_Class)) %>%
@@ -84,7 +63,7 @@ y.mat <- y.df %>%
 n.mat <- lengths %>%
   bind_rows(tibble(Age_Month = c(1+11/12, 2 + c(0, 1/12, 2/12, 3/12, 11/12), 3+c(0, 1/12, 2/12, 3/12)),
                    Year_Class = 2015, Area = as.character(12))) %>% # This adds columns for wintertime months
-  select(-Month, -Age, -Month_Num, -Year, -Avg_Len, -sd) %>%
+  select(-(Age:Month_Num), -sd, -(Std_Log_Bio:std_MSL)) %>%
   spread(key = Age_Month, value = N) %>%
   select(-(Area:Year_Class)) %>%
   as.matrix()
@@ -108,13 +87,14 @@ ssh.mat <- bio.mat <- year.df %>%
   as.matrix 
 class(ssh.mat) <- class(bio.mat) <- 'numeric'
 
+# I don't think these are right. Need to reinvestigate to actually run model.
 for(yr in unique(ssh$Year)) {
   ssh.mat[which(year.df == yr)] <- ssh$std_MSL[ssh$Year == yr]
-  if(length(biomass$std_Log_Biomass[biomass$Year == yr]) == 0) {
+  if(length(biomass$Std_Log_Bio[biomass$Year == yr]) == 0) {
     bio.mat[which(year.df == yr)] <- NA
     print(yr)
   } else {
-    bio.mat[which(year.df == yr)] <- biomass$std_Log_Biomass[biomass$Year == yr]
+    bio.mat[which(year.df == yr)] <- biomass$Std_Log_Bio[biomass$Year == yr]
   }
 }
 
@@ -124,12 +104,20 @@ bio.mat <- bio.mat[,-(1:2)]
 complete.data <- which(!is.na(y.mat), arr.ind = TRUE)
 n_pos <- nrow(complete.data)
 y.vec <- y.mat[which(!is.na(y.mat))]
+n.vec <- n.mat[which(!is.na(y.mat))]
 # area.vec <- area.mat[which(!is.na(y.mat))]
 
 cohorts <- as.numeric(as.factor(y.df$Year_Class))
 areas <- as.numeric(as.factor(y.df$Area))
 
+area.locations <- read_csv('Data/area_locations.csv') %>%
+  arrange(Area)
+
 mcmc_list <- list(n_mcmc = 3000, n_burn = 900, n_thin = 1)
+mcmc_list <- list(n_mcmc = 300, n_burn = 200, n_thin = 1)
+
+
+# run model ---------------------------------------------------------------
 
 mod <- stan('Code/growth_model.stan', 
             data = list(N = N, M = M, y = y.vec - mean(y.vec), cohorts = cohorts, 
@@ -138,41 +126,68 @@ mod <- stan('Code/growth_model.stan',
                         # n_obsvar = max(obsVariances), proVariances = proVariances, 
                         # n_provar = max(proVariances), trends = trends, 
                         # n_trends = max(trends), 
-                        n_area = max(area.vec), area = areas, #area.vec,
+                        n_area = max(areas), area = areas, #area.vec,
                         n_pos = n_pos, col_indx_pos = complete.data[,2], 
                         row_indx_pos = complete.data[,1], 
-                        return_preds = 1, calc_ppd = 1, winter_ind = winter_ind), 
+                        return_preds = 1, calc_ppd = 1, samp_size = n.vec), 
             pars = c('x0_mean', 'sigma_x0', 'x0', 'area_offset', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs', 
-                     'pred_vec', 'pro_dev'), 
+                     'pred_vec', 'pro_dev', 'y_pp'), 
             chains = 3, iter = mcmc_list$n_mcmc, cores = 3,
             thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
             control = list(adapt_delta = 0.9, max_treedepth = 10))
+pairs(mod, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs', 'lp__'))
+launch_shinystan(mod)
+summary(mod, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs'))$summary
 
-png('Figures/CMSI_symposium/anova.png', width = 7, height = 5, units = 'in', res=500)
-summary(mod, pars = c('sigma_x0', 'sigma_area', 'sigma_process', 'sigma_obs'))$summary[,c(4,6,8)] %>% 
-  as_tibble %>%
-  mutate(param = c('Initial size\n(year)', 'Initial size\n(area)', 'Process\n(year only)', 'Observation\n(year x area)')) %>%
-  ggplot() +
-  geom_col(aes(x = param, y = `50%`, fill = param)) +
-  geom_segment(aes(x = param, xend = param, y = `2.5%`, yend = `97.5%`), lwd=1.2) +
-  labs(x = 'Variance component', y = 'Estimated standard deviation') +
-  theme_classic(base_size = 18) +
-  guides(fill = FALSE) +
-  scale_fill_manual(values = LaCroixColoR::lacroix_palette('PassionFruit', 4))
-dev.off()
+summary(mod.vague.priors, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs', 'lp__'))$summary
 
-med.pred <- as.matrix(mod)[,grep('pred', colnames(as.matrix(mod)))] %>%
-  apply(2, median)
-pred.mat <- matrix(nrow = nrow(y.mat), ncol = ncol(y.mat), 
-                   dimnames = list(rownames(y.mat), colnames(y.mat)))
+mod.spatiotemporal <- stan('Code/growth_model_spatiotemporal.stan', 
+            data = list(N = N, M = M, y = y.vec - mean(y.vec), cohorts = cohorts, 
+                        S = max(cohorts), 
+                        # obsVariances = obsVariances, 
+                        # n_obsvar = max(obsVariances), proVariances = proVariances, 
+                        # n_provar = max(proVariances), trends = trends, 
+                        # n_trends = max(trends), 
+                        n_area = max(areas), area = areas, #area.vec,
+                        n_pos = n_pos, col_indx_pos = complete.data[,2], 
+                        row_indx_pos = complete.data[,1], 
+                        return_preds = 1, calc_ppd = 0,
+                        area_centers = area.locations$Centroid[1:max(areas)]), # There is an NA at the end of the data frame because the centroids are diff(latitude)
+            pars = c('x0_mean', 'sigma_x0', 'x0', 'area_offset', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs', 'gp_theta', 'gp_sigma', 
+                     'pred_vec', 'pro_dev'), 
+            chains = 3, iter = mcmc_list$n_mcmc, cores = 3,
+            thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
+            control = list(adapt_delta = 0.9, max_treedepth = 15))
+pairs(mod.spatiotemporal, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'rho', 'alpha', 'B', 'sigma_process', 'sigma_obs', 'lp__'))
+launch_shinystan(mod.spatiotemporal)
+
+
+
+# explore output ----------------------------------------------------------
+
 
 pro.dev <- as.matrix(mod)[,grep('pro_dev', colnames(as.matrix(mod)))] %>%
-  apply(2, median) %>%
-  matrix(nrow = N-1, dimnames = list(Age_Month = names(y.df)[-c(1:2,21)], Year_Class = 1986:2017)) %>%
+  apply(2, median) %>% 
+  # array(dim = c(N-1, max(cohorts)), dimnames = list(Age_Month = names(y.df)[-c(1:2,21)], Year_Class = 1986:2017)) %>%
+  matrix(nrow = N-1, dimnames = list(Age_Month = names(y.df)[-c(1:2,21)], Year_Class = 1986:2017), byrow=FALSE) %>%
+  reshape2::melt(value.name = 'pro.dev') %>%
+  as_tibble()
+  
+pro.dev.st <- as.matrix(mod.spatiotemporal)[,grep('pro_dev', colnames(as.matrix(mod.spatiotemporal)))] %>%
+  apply(2, median) %>% 
+  array(dim = c(N-1, max(cohorts),  max(areas)), dimnames = list(Age_Month = names(y.df)[-c(1:2,21)], Year_Class = 1986:2017), Area = 1:max(areas)) %>%
+  # matrix(nrow = N-1, dimnames = list(Age_Month = names(y.df)[-c(1:2,21)], Year_Class = 1986:2017)) %>%
   reshape2::melt(value.name = 'pro.dev') %>%
   as_tibble()
 
-x0.dev <- as.matrix(mod)[,grep('x0\\[', colnames(as.matrix(mod)))] %>%
+pro.dev.st %>%
+  filter(Age_Month %% 1 > 0.3 & Age_Month %% 1 < 0.9) %>% # filter out months with no data
+  mutate(Age_Month = round(Age_Month, 2)) %>%
+  ggplot() +
+  geom_boxplot(aes(x = factor(Age_Month), y = pro.dev)) +
+  geom_hline(aes(yintercept = 0), col = 'red')
+
+x0.dev <- as.matrix(mod.spatiotemporal)[,grep('x0\\[', colnames(as.matrix(mod.spatiotemporal)))] %>%
   apply(2, median) + mean(y.mat, na.rm = TRUE) 
 
 x0.dev <- bind_cols(x0 = x0.dev, Year_Class = sort(unique(y.df$Year_Class))) %>%
@@ -187,14 +202,20 @@ ssh.plot <- ggplot(x0.dev) +
   theme_classic(base_size = 18)
 
 bio.plot <- ggplot(x0.dev) +
-  geom_point(aes(x = std_Log_Biomass, y = x0), cex=2.5) +
+  geom_point(aes(x = Std_Log_Bio, y = x0), cex=2.5) +
   labs(x = 'Standardized log(Biomass)\n', y = '') +
   theme_classic(base_size = 18)
+
+lm(x0 ~ Std_Log_Bio, data = x0.dev) %>% summary
 
 png('Figures/CMSI_symposium/covariates.png', width = 10, height = 5, units = 'in', res=500)
 gridExtra::grid.arrange(ssh.plot, bio.plot, nrow = 1)
 dev.off()
 
+med.pred <- as.matrix(mod)[,grep('pred', colnames(as.matrix(mod)))] %>%
+  apply(2, median)
+pred.mat <- matrix(nrow = nrow(y.mat), ncol = ncol(y.mat), 
+                   dimnames = list(rownames(y.mat), colnames(y.mat)))
 for(ii in 1:nrow(complete.data)) {
   pred.mat[complete.data[ii,1], complete.data[ii,2]] <- med.pred[ii] 
 }
@@ -236,7 +257,7 @@ png('Figures/month_resids_bounded.png', width = 11, height = 6, units = 'in', re
 pro.dev %>%
   filter(Age_Month %% 1 > 0.3 & Age_Month %% 1 < 0.9) %>% # filter out months with no data
   ggplot() +
-  geom_boxplot(aes(x = factor(Age_Month), y = pro.dev)) +
+  geom_boxplot(aes(x = factor(Year_Class), y = pro.dev)) +
   geom_hline(yintercept = 0, col = 'red') +
   ylab('Median residual') +
   xlab('Month') +
@@ -264,13 +285,13 @@ test %>%
   NULL
 # this can get fancier...
 
-qplot(MedPredLength, Avg_Len - MedPredLength, data = length.fits, alpha = .5) + 
+qplot(N, Avg_Len - MedPredLength, data = length.fits, alpha = .5) + 
   stat_smooth() +
   geom_hline(yintercept = 0, col = 'red')
 # will a lognormal dist'n fix this skew?
 
 ggplot(length.fits) +
-  geom_boxplot(aes(x = Area, y = Avg_Len - MedPredLength))
+  geom_boxplot(aes(x = factor(Year), y = Avg_Len - MedPredLength))
 # need to fix this pattern. Estimate a mean for the observation process for each area?
 
 tibble(med.pred, MeanLength = ordered.y)[order(complete.data.mat[,1]),] %>%
@@ -335,7 +356,7 @@ y.vec <- y.mat[which(!is.na(y.mat))]
 cohorts <- as.numeric(as.factor(y.df$Year_Class))
 areas <- as.numeric(as.factor(y.df$Area))
 
-mcmc_list <- list(n_mcmc = 1000, n_burn = 300, n_thin = 1)
+mcmc_list <- list(n_mcmc = 3000, n_burn = 900, n_thin = 1)
 
 mod <- stan('Code/growth_model_predictors.stan', 
             data = list(N = N, M = M, y = y.vec - mean(y.vec), 
@@ -354,7 +375,7 @@ mod <- stan('Code/growth_model_predictors.stan',
                      'pred_vec', 'pro_dev'), 
             chains = 3, iter = mcmc_list$n_mcmc, cores = 3,
             thin = mcmc_list$n_thin,
-            control = list(adapt_delta = 0.9, max_treedepth = 10))
+            control = list(adapt_delta = 0.9, max_treedepth = 15))
 
 launch_shinystan(mod)
 

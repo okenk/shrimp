@@ -50,3 +50,16 @@ yy %+%
      group_by(Age_Month, Area) %>%
      summarize(Avg_Len = mean(Avg_Len)))
 dev.off()
+
+png('Figures/CMSI_symposium/anova.png', width = 7, height = 5, units = 'in', res=500)
+summary(mod, pars = c('sigma_x0', 'sigma_area', 'sigma_process', 'sigma_obs'))$summary[,c(4,6,8)] %>% 
+  as_tibble %>%
+  mutate(param = c('Initial size\n(year)', 'Initial size\n(area)', 'Process\n(year only)', 'Observation\n(year x area)')) %>%
+  ggplot() +
+  geom_col(aes(x = param, y = `50%`, fill = param)) +
+  geom_segment(aes(x = param, xend = param, y = `2.5%`, yend = `97.5%`), lwd=1.2) +
+  labs(x = 'Variance component', y = 'Estimated standard deviation') +
+  theme_classic(base_size = 18) +
+  guides(fill = FALSE) +
+  scale_fill_manual(values = LaCroixColoR::lacroix_palette('PassionFruit', 4))
+dev.off()
