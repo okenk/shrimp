@@ -27,7 +27,7 @@ biomass <- read_excel('Data/OR-VPE.XLSX') %>%
          Std_Log_Bio = (`OR log VPE` - mean(`OR log VPE`, na.rm = TRUE))/sd(`OR log VPE`, na.rm = TRUE)) %>%
   select(Year, Std_Log_Bio, `North Log VPE`, `South Log VPE`) %>%
   filter(!is.na(Std_Log_Bio))
-  
+
 lengths <- read_csv('Data/Compiled_Lengths.csv', 
                     col_types = 'cdcddddd') %>%
   mutate(Year_Class = Year - Age, # Year class is year at age 0, i.e., the year where they start settling in fall
@@ -113,8 +113,27 @@ areas <- as.numeric(as.factor(y.df$Area))
 area.locations <- read_csv('Data/area_locations.csv') %>%
   arrange(Area)
 
+sex_ratios <-  read_csv('Data/sex_ratios.csv') %>%
+  select(year:`age 2 males`) %>%
+  filter(year >= 1986, year <= 2017) %>%
+  group_by(year) %>%
+  summarize(n_age1 = sum(`age 1 all`),
+            n_age1f = sum(`age1 fems+trans`),
+            n_age2 = sum(`age 2 all`),
+            n_age2f = n_age2 - sum(`age 2 males`)) %>%
+  mutate(prop_1f = n_age1f/n_age1,
+         prop_2f = n_age2f/n_age2)
+
+sex_ratio_mat <- matrix(0, nrow = max(cohorts), ncol = N, dimnames = list(cohort = NULL, month = NULL))
+sex_ratio_mat[,1:12] <- sex_ratios$prop_1f
+sex_ratio_mat[-nrow(sex_ratio_mat), 13:24] <- sex_ratios$prop_2f[-1]
+# Don't fill the last row of matrix, no length data for later ages of that cohort
+# Don't include the first row of df, first cohort is 1986 (sampled in 1989), no lengths for age 2+ in 1986
+sex_ratio_mat[-nrow(sex_ratio_mat)+0:1, 25:ncol(sex_ratio_mat)] <- sex_ratios$prop_2f[-(1:2)]
+# Also checked that numbers get repeated row-wise and are unique column-wise, which is correct.
+
 mcmc_list <- list(n_mcmc = 3000, n_burn = 900, n_thin = 1)
-mcmc_list <- list(n_mcmc = 300, n_burn = 200, n_thin = 1)
+mcmc_list <- list(n_mcmc =300, n_burn = 200, n_thin = 1)
 
 
 # run model ---------------------------------------------------------------
@@ -128,16 +147,17 @@ mod <- stan('Code/growth_model.stan',
                         # n_trends = max(trends), 
                         n_area = max(areas), area = areas, #area.vec,
                         n_pos = n_pos, col_indx_pos = complete.data[,2], 
-                        row_indx_pos = complete.data[,1], 
-                        return_preds = 1, calc_ppd = 1, samp_size = n.vec), 
-            pars = c('x0_mean', 'sigma_x0', 'x0', 'area_offset', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs', 
+                        row_indx_pos = complete.data[,1], sex_ratio = sex_ratio_mat - 0.5,
+                        calc_ppd = 1, samp_size = n.vec), 
+            pars = c('x0_mean', 'sigma_x0', 'x0', 'area_offset', 'sigma_area', 'U', 'U_season', 'U_sex', 'B', 'sigma_process', 'sigma_obs', 
                      'pred_vec', 'pro_dev', 'y_pp'), 
             chains = 3, iter = mcmc_list$n_mcmc, cores = 3,
             thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
             control = list(adapt_delta = 0.9, max_treedepth = 10))
 pairs(mod, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs', 'lp__'))
-launch_shinystan(mod)
-summary(mod, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs'))$summary
+xx <- as.shinystan(mod)
+launch_shinystan(drop_parameters(xx, pars = c('pro_dev', 'y_pp', 'pred_vec')))
+xx <- summary(mod, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs'))$summary
 
 summary(mod.vague.priors, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs', 'lp__'))$summary
 
@@ -159,7 +179,7 @@ mod.spatiotemporal <- stan('Code/growth_model_spatiotemporal.stan',
             thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
             control = list(adapt_delta = 0.9, max_treedepth = 15))
 pairs(mod.spatiotemporal, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'rho', 'alpha', 'B', 'sigma_process', 'sigma_obs', 'lp__'))
-launch_shinystan(mod.spatiotemporal)
+launch_shinystan(mod.spatiotemporal, )
 
 
 
@@ -180,12 +200,15 @@ pro.dev.st <- as.matrix(mod.spatiotemporal)[,grep('pro_dev', colnames(as.matrix(
   reshape2::melt(value.name = 'pro.dev') %>%
   as_tibble()
 
-pro.dev.st %>%
+pro.dev %>%
   filter(Age_Month %% 1 > 0.3 & Age_Month %% 1 < 0.9) %>% # filter out months with no data
   mutate(Age_Month = round(Age_Month, 2)) %>%
   ggplot() +
   geom_boxplot(aes(x = factor(Age_Month), y = pro.dev)) +
-  geom_hline(aes(yintercept = 0), col = 'red')
+  geom_hline(aes(yintercept = 0), col = 'red') +
+  xlab('Age (yrs)') +
+  ylab('Median residual') +
+  theme_bw(base_size = 18)
 
 x0.dev <- as.matrix(mod.spatiotemporal)[,grep('x0\\[', colnames(as.matrix(mod.spatiotemporal)))] %>%
   apply(2, median) + mean(y.mat, na.rm = TRUE) 
@@ -253,15 +276,15 @@ ppd <- as.matrix(mod)[,grep('y_pp', colnames(as.matrix(mod)))] %>%
   na.omit() %>%
   mutate(Age_Month = round(as.numeric(Age_Month), 3))
 
-png('Figures/month_resids_bounded.png', width = 11, height = 6, units = 'in', res = 500)
+png('Figures/month_resids_bounded.png', width = 14, height = 6, units = 'in', res = 500)
 pro.dev %>%
-  filter(Age_Month %% 1 > 0.3 & Age_Month %% 1 < 0.9) %>% # filter out months with no data
+#  filter(Age_Month %% 1 > 0.3 & Age_Month %% 1 < 0.9) %>% # filter out months with no data
   ggplot() +
-  geom_boxplot(aes(x = factor(Year_Class), y = pro.dev)) +
+  geom_boxplot(aes(x = factor(round(Age_Month, 2)), y = pro.dev)) +
   geom_hline(yintercept = 0, col = 'red') +
   ylab('Median residual') +
   xlab('Month') +
-  theme_bw(base_size = 20) +
+  theme_bw(base_size = 18) +
   NULL
 dev.off()
 
