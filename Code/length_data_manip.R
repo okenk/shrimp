@@ -412,6 +412,4 @@ mod <- stan('Code/growth_model_predictors.stan',
             thin = mcmc_list$n_thin,
             control = list(adapt_delta = 0.9, max_treedepth = 15))
 
-launch_shinystan(mod)
-
 save(mod, file = 'Code/mcmc_run.RData')
