@@ -22,10 +22,16 @@ ssh <- read_csv('Data/CC_SSH.csv') %>%
   mutate(std_MSL = (Monthly_MSL - mean(Monthly_MSL, na.rm = TRUE))/sd(Monthly_MSL, na.rm = TRUE)) %>%
   select(Year, std_MSL) 
 
+standardize_vec <- function(vec) {
+  (vec - mean(vec, na.rm = TRUE)) / sd(vec, na.rm = TRUE)
+}
+
 biomass <- read_excel('Data/OR-VPE.XLSX') %>%
-  mutate('Year' = `Spawn Year` + 1, # this naming scheme makes no sense to me, but I *think* spawn year + 1 is the year the cohort is age 1.
-         Std_Log_Bio = (`OR log VPE` - mean(`OR log VPE`, na.rm = TRUE))/sd(`OR log VPE`, na.rm = TRUE)) %>%
-  select(Year, Std_Log_Bio, `North Log VPE`, `South Log VPE`) %>%
+  mutate('Year' = `Spawn Year`, # this naming scheme makes no sense to me, but I *think* spawn year is the year the cohort is age 1.
+         Std_Log_Bio = standardize_vec(`OR log VPE`),
+         Std_Bio = standardize_vec(`OR VPE calculated`),
+         Std_R = standardize_vec(`OR Age 1`)) %>%
+  select(Year, Std_Log_Bio, Std_Bio, Std_R, `North Log VPE`, `South Log VPE`) %>%
   filter(!is.na(Std_Log_Bio))
 
 lengths <- read_csv('Data/Compiled_Lengths.csv', 
@@ -132,7 +138,7 @@ sex_ratio_mat[-nrow(sex_ratio_mat), 13:24] <- sex_ratios$prop_2f[-1]
 sex_ratio_mat[-nrow(sex_ratio_mat)+0:1, 25:ncol(sex_ratio_mat)] <- sex_ratios$prop_2f[-(1:2)]
 # Also checked that numbers get repeated row-wise and are unique column-wise, which is correct.
 
-mcmc_list <- list(n_mcmc = 3000, n_burn = 900, n_thin = 1)
+mcmc_list <- list(n_mcmc = 3000)
 mcmc_list <- list(n_mcmc =300, n_burn = 200, n_thin = 1)
 
 
@@ -147,13 +153,13 @@ mod <- stan('Code/growth_model.stan',
                         # n_trends = max(trends), 
                         n_area = max(areas), area = areas, #area.vec,
                         n_pos = n_pos, col_indx_pos = complete.data[,2], 
-                        row_indx_pos = complete.data[,1], sex_ratio = sex_ratio_mat - 0.5,
+                        row_indx_pos = complete.data[,1],
                         calc_ppd = 1, samp_size = n.vec), 
-            pars = c('x0_mean', 'sigma_x0', 'x0', 'area_offset', 'sigma_area', 'U', 'U_season', 'U_sex', 'B', 'sigma_process', 'sigma_obs', 
+            pars = c('x0_mean', 'sigma_x0', 'x0', 'area_offset', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs', 
                      'pred_vec', 'pro_dev', 'y_pp'), 
             chains = 3, iter = mcmc_list$n_mcmc, cores = 3,
-            thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
-            control = list(adapt_delta = 0.9, max_treedepth = 10))
+            #thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
+            control = list(adapt_delta = 0.9, max_treedepth = 10), )
 pairs(mod, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs', 'lp__'))
 xx <- as.shinystan(mod)
 launch_shinystan(drop_parameters(xx, pars = c('pro_dev', 'y_pp', 'pred_vec')))
@@ -210,7 +216,7 @@ pro.dev %>%
   ylab('Median residual') +
   theme_bw(base_size = 18)
 
-x0.dev <- as.matrix(mod.spatiotemporal)[,grep('x0\\[', colnames(as.matrix(mod.spatiotemporal)))] %>%
+x0.dev <- as.matrix(mod)[,grep('x0\\[', colnames(as.matrix(mod)))] %>%
   apply(2, median) + mean(y.mat, na.rm = TRUE) 
 
 x0.dev <- bind_cols(x0 = x0.dev, Year_Class = sort(unique(y.df$Year_Class))) %>%
@@ -225,13 +231,19 @@ ssh.plot <- ggplot(x0.dev) +
   theme_classic(base_size = 18)
 
 bio.plot <- ggplot(x0.dev) +
-  geom_point(aes(x = Std_Log_Bio, y = x0), cex=2.5) +
-  labs(x = 'Standardized log(Biomass)\n', y = '') +
+  geom_point(aes(x = Std_R, y = x0), cex=2.5) +
+  labs(x = 'Standardized Recruitment\n', y = '') +
   theme_classic(base_size = 18)
+
+ggplot(x0.dev) +
+  geom_point(aes(x = Std_R, y = x0), cex=2.5) +
+  labs(x = 'Standardized Recruitment\n', y = '') +
+  theme_classic(base_size = 18)
+
 
 lm(x0 ~ Std_Log_Bio, data = x0.dev) %>% summary
 
-png('Figures/CMSI_symposium/covariates.png', width = 10, height = 5, units = 'in', res=500)
+png('Figures/covariates.png', width = 10, height = 5, units = 'in', res=500)
 gridExtra::grid.arrange(ssh.plot, bio.plot, nrow = 1)
 dev.off()
 

@@ -13,7 +13,6 @@ data {
   int<lower=0> row_indx_pos[n_pos];
   // int<lower=0> samp_size[n_pos];
   vector[n_pos] y; // data
-  matrix[S, N] sex_ratio;
   int<lower=0, upper=1> calc_ppd;
 }
 
@@ -33,7 +32,6 @@ parameters {
   real<lower=0> sigma_area;
   real U;
   real U_season;
-  real U_sex;
   real<lower=0, upper=1> B;
   real<lower=0> sigma_process;
   real<lower=0> sigma_obs;
@@ -45,7 +43,7 @@ transformed parameters {
   for(m in 1:M) {
     x[1,m] = x0[cohorts[m]] + area_offset[area[m]]; // initial state, vague prior below
     for(t in 2:N) {
-      x[t,m] = B*x[t-1,m] + (U_season + U_sex * sex_ratio[cohorts[m], t-1]) * seasons[t-1] + U + 
+      x[t,m] = B*x[t-1,m] + U_season * seasons[t-1] + U + 
         pro_dev[t-1,cohorts[m]];
     }
   }
@@ -65,7 +63,7 @@ model {
   
   U ~ normal(0.0,1.0);
   U_season ~ normal(0.0,1.0);
-  U_sex ~ normal(1.0, 1.0); // more females should magnify seasonal fluctuations
+  //U_sex ~ normal(1.0, 1.0); // more females should magnify seasonal fluctuations
   B ~ beta(2,2);
   // B ~ normal(0.75, 1.0);
   for(i in 1:(N-1)){
