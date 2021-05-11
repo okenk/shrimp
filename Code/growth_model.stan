@@ -20,7 +20,7 @@ transformed data {
   vector[N] seasons;
   for(t in 1:N) {
     seasons[t] = sin(pi()*fmod(t+1,12)/6);
-    // fmod = floor function
+    // fmod = remainder function
   }
 }
 parameters {
@@ -64,8 +64,8 @@ model {
   U ~ normal(0.0,1.0);
   U_season ~ normal(0.0,1.0);
   //U_sex ~ normal(1.0, 1.0); // more females should magnify seasonal fluctuations
-  B ~ beta(2,2);
-  // B ~ normal(0.75, 1.0);
+  // B ~ beta(2,2);
+  B ~ normal(3, 10);
   for(i in 1:(N-1)){
     pro_dev[i] ~ normal(0.0, sigma_process);
   }

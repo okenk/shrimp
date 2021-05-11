@@ -1,12 +1,16 @@
 ---
 title: "Shrimp modeling"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 
-```{r, include = FALSE}
-# library(rstan)
-# library(tidyverse)
-# load('../Code/model_output.Rdata')
+```{r, include = FALSE, message=FALSE, results='hide'}
+library(rstan)
+library(tidyverse)
+library(here)
+load(here('Code/model_fit.RData'))
+load(here('Code/model_fit_tables.RData'))
 ```
 
 ## Data:
@@ -21,51 +25,57 @@ Data we have at month-year-fishing area resolution:
 
 Here is a (different) plot of the mean lengths at age by area and year class.
 
-```{r, echo = FALSE, fig.height = 6, fig.width = 6}
+```{r, echo = FALSE, fig.height = 6, fig.width = 6, warning=FALSE, message=FALSE}
 ggplot(length.fits, aes(x = Age_Month, y = Avg_Len, group = paste(Year_Class, Area), col = Year_Class)) +
   geom_path(lwd = .25, alpha = 0.5) +
   geom_point(cex=.5, alpha = 0.5) +
-  facet_wrap(~Area) +
+  facet_wrap(~Area, drop = TRUE) +
   labs(x = 'Age (years)', y = 'Mean Length (mm)', color = 'Cohort') +
   NULL
 ```
+
 Here is a map of the state areas:
-![](../Figures/shrimp_areas.png)
+
+![](../Figures/shrimp_areas.png){height=4in}
 
 
-## Length model:
-$L_{a,y,m}$ is length of age $a$ shrimp in month $m$ of year $y$. Then
+## Model:
+$L_{a,y,r}$ is length of age $a$ (in months) shrimp from the cohort $c$ caught in area (region) r, and $m$ is the month of the year (i.e., cycles back to 1 at the end of the year unlike $a$). To align $m$ with the seasonal cycle of growth, $m=1$ corresponds with March.
 
 $$\begin{aligned}
-L_{1,y,1} &= \alpha_0 + \epsilon_{1,y,1} \\
-L_{a,y,m} &= \alpha_1 + \beta_1 L_{a,y,m-1} + \epsilon_{a,y,m} \\
-L_{a,y,1} &= \alpha_2 + \beta_2 L_{a-1, y-1, m_{\max}} + \epsilon_{a,y,1}
+L_{1,c,r} &= \mu_{L1} + \gamma_{r} + \varepsilon_{1,c} \\
+L_{a,c,r} &= \alpha_0 + \alpha_1 L_{a-1,c,r} + \alpha_s \sin\left(\tfrac{\pi m}{6}\right) + \varepsilon_{a,c,r} \\
+\hat{L}_{a,c,r} &= L_{a,c,r} + \delta_{a,c,r}
 \end{aligned}$$
 
-$\alpha_0$ is average size of age 1 shrimp in April, $\alpha_1$ is the within fishing season monthly growth increment, $\alpha_2$ is the across fishing season growth increment, and $\beta_1$ and $\beta_2$ are the density-dependent terms within and across fishing seasons, respectively. Right now I assume $\alpha_1 = \alpha_2$ and $\beta_1 = \beta_2$ though I don't think that is correct as there is not much wintertime growth. All of these can be functions of environmental variables. There is also an existing theory that growth is density-dependent, so they grow less when there are more shrimp around. The process variability $\epsilon$ follows a normal distribution, and I estimate a separate $\sigma_\text{init size}$ and $\sigma_\text{growth}$.
+$\mu_{L1}$ is average size of age 1 shrimp in April, $\alpha_0$ and $\alpha_1$ describe the average monthly growth, and $\alpha_s$ is the magnitude of the seasonality component. 
 
-## Observation model:
-
-$$\bar{L}_{a,y,m,area} \sim N\left(L_{a,y,m} + \gamma_{area}, \frac{\sigma_\text{obs}}{\sqrt{n_{a,y,m,area}}} \right) $$
-
-where $\bar{L}_{a,y,m,area}$ is the empirical mean length for age $a$ in month $m$ of year $y$ sampled in area $area$, $\sigma_\text{obs}$ is the observation standard deviation, $n_{a,y,m,area}$ is the number of age $a$ shrimp that were sampled from the catch in month $m$ of year $y$ in area $area$, and $\gamma_{area} \sim N(0, \sigma_\text{area})$. The $\gamma$ offset allows different areas to have consistently smaller or larger shrimp.
+Distributional assumptions are:
+$$\begin{aligned}
+\varepsilon_{1,c} &\sim N(0, \sigma_{L1}) \\
+\varepsilon_{a,c} &\sim N(0, \sigma_p), a\neq 1\\
+\delta_{a,c,r} &\sim N(0, \sigma_o)\\
+\gamma_r &\sim N(0, \sigma_r)
+\end{aligned}$$
 
 ## Fitting:
 
-The model is fit in stan as a multivariate autoregressive state-space model. Each year class is a different "state," but the underlying parameters for each state are the same (for now). Each area represents a different observation process of the same state. 
+The model is fit in Stan as a multivariate autoregressive state-space model. The global mean is subtracted from all lengths to improve numerical stability. Each year class is essentially a different "state", and each area represents a different observation process of the same state. Three chains are run for 5000 iterations, and the final 2500 iterations of each chain are retained. [More chains fewer iterations?]
 
-#Results:
+# Results:
 
-First, here is a table of the estimated parameters. Some of the effective sample sizes are kind of low and I should probaby run this longer.
+First, here is a table of the estimated parameters. The mixing for the initial size (not just the mean below, but also the parameters for each year and for the fishing area offsets) is poor, so the model should probably get run longer. 
 ```{r, echo = FALSE}
-mod.summary <- summary(mod, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U', 'B', 'sigma_process', 'sigma_obs'))$summary
-row.names(mod.summary) <- c('$\\alpha_0$', '$\\sigma_\\text{init size}$', '$\\sigma_\\text{area}$', '$\\alpha_1$', '$\\beta_1$', '$\\sigma_\\text{growth}$', '$\\sigma_\\text{obs}$')
+mod.summary <- summary(mod, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U_season', 'U', 'B', 'sigma_process', 'sigma_obs'))$summary
+row.names(mod.summary) <- c('$\\mu_{L1}$', '$\\sigma_{L1}$', '$\\sigma_r$', '$\\alpha_s$', '$\\alpha_0$', '$\\alpha_1$', '$\\sigma_p$', '$\\sigma_o$')
 knitr::kable(mod.summary)
 ```
 
 Second, here is a plot of residuals versus fitted values (using the median from the posterior as the fitted value) with a smoother. We see that the residuals look alright. 
-```{r, echo = FALSE}
-qplot(MedPredLength, Avg_Len - mean(Avg_Len) - MedPredLength, data = length.fits, alpha = .5) + 
+
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+ggplot(length.fits, aes(x = MedPredLength, y = Avg_Len - MedPredLength)) +
+  geom_point(alpha = .5) + 
   stat_smooth() +
   geom_hline(yintercept = 0, col = 'red') +
   theme(legend.position = 'none') +
@@ -74,33 +84,26 @@ qplot(MedPredLength, Avg_Len - mean(Avg_Len) - MedPredLength, data = length.fits
 ```
 
 
-Here is a plot of residuals split up by area. I fixed the problem!
-
-```{r, echo = FALSE}
+```{r, echo = FALSE, warning=FALSE}
 ggplot(length.fits) +
-  geom_boxplot(aes(x = Area, y = Avg_Len - mean(Avg_Len) - MedPredLength)) +
-  geom_hline(yintercept = 0, col = 'red') +
-  labs(y = 'Median residual')
-```
-```{r, echo = FALSE}
-ggplot(length.fits) +
-  geom_boxplot(aes(x = factor(Year), y = Avg_Len - mean(Avg_Len) - MedPredLength)) +
+  geom_boxplot(aes(x = factor(Year), y = Avg_Len - MedPredLength)) +
   geom_hline(yintercept = 0, col = 'red') +
   labs(y = 'Median residual', title = 'Residuals versus year', x = 'Year') +
   scale_x_discrete(labels = c('', 1990, rep('', 9), 2000, rep('', 9), 2010, rep('', 8)))
 
 ggplot(length.fits) +
-  geom_boxplot(aes(x = factor(Month_Num), y = Avg_Len - mean(Avg_Len) - MedPredLength)) +
+  geom_boxplot(aes(x = factor(Month_Num), y = Avg_Len - MedPredLength)) +
   geom_hline(yintercept = 0, col = 'red') +
   labs(x = 'Month', y = 'Median residual', title = 'Residuals versus Month')
+
 ```
 
-I also thought it would be useful to look at the process errors. We can see that the process model is not working great, especially for the first over-winter growth increment.
+I also thought it would be useful to look at the process errors. We can see that the process model under-estimates growth for age 1 and over-estimates it for age 3. Oddly, $\alpha_1$ is being estimated very close to its bound at 1. If it were smaller, that would allow growth to slow as shrimp get larger. Strong priors with minimal weight near 1 did not change this, but did slow mixing.
 ```{r, echo = FALSE}
 ggplot(pro.dev) + 
   geom_boxplot(aes(x = factor(Age_Month), y = pro.dev)) +
   geom_hline(yintercept = 0, col = 'red') +
-  scale_x_discrete(labels = c(1, rep('', 6), 2, rep('', 6), 3, rep('', 5))) +
+  scale_x_discrete(labels = c(1, rep('', 11), 2, rep('', 11), 3, rep('', 5))) +
   labs(x = 'Age (years)', y = 'Process error')
 
 ggplot(pro.dev) + 
@@ -113,7 +116,10 @@ ggplot(pro.dev) +
 ```
 
 ## Next steps:
+1. Does anyone have any thoughts on why faster growth during the first year and slower growth especially during the second winter and age 3 are getting shunted into random effects? Is it important to fix? I'm not weighting anything by sample size. Maybe age 3 mean lengths are unreliable and need to be down-weighted? I recall that I tried doing that and the results were wonky for some reason. Maybe the data are just not informative enough for such a data-hungry state-space model? 
 
-I think I should try to fix the wintertime growth problem.
+2. Compare with condition index (have data), look at possible oceanographic and density-related correlates with growth and condition?
+
+
 <!-- Martell et al. 2000 report annual M of 0.96 $\text{yr}^{-1}$, which is used in VPA.  -->
 
