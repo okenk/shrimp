@@ -73,7 +73,7 @@ x0.dev <- list_of_draws$x0 %>%
   left_join(ssh) %>%
   left_join(biomass)
 
-## observation errors
+ ## observation errors
 
 med.pred <- list_of_draws$pred %>%
   apply(2, median)
