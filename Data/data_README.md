@@ -1,6 +1,6 @@
 Files in the Data folder:
 
--   Alldata.xlsx: There is a metadata tab, but the columns in BCI tab are not included in metadata. How is the BCI calculated??? Assume "projected weight Bob" is based on sum of projwt from allshrimp file. bob-residual appears to be projected weight Bob minus total weight. But BCI? Seems to be a temporal trend in residuals? Also positively skewed indicates inappropriate length-weight relationship? (Based on scrolling through, check in R.)
+-   Alldata.xlsx: "projected weight Bob" is based on sum of projwt from allshrimp file. bob-residual is projected weight Bob minus total weight. BCI is bob-residual divided by sample_ct. There appear to be some vessel-catch date combinations with more than one bulk sample, and I cannot find a unique identifier for the bulk samples. Otherwise I was generally able to recreate the residuals.
 
 -   allshrimp.xlsx: rework tab has length, age, area, month, year, lots of other info, for each *individual* shrimp sampled (rather than average across each bulk port sample). projwt is the projected weight based on a length-weight relationship (source/equation?).
 
