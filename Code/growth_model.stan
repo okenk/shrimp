@@ -18,22 +18,31 @@ data {
 
 transformed data {
   vector[N] seasons;
+  vector[S] pro_dev[N-1];
+
   for(t in 1:N) {
     seasons[t] = sin(pi()*fmod(t+1,12)/6);
     // fmod = remainder function
+  }
+  
+  for(i in 1:(N-1)){
+    for(j in 1:S){
+      pro_dev[i,j] = 0.0;
+    }
   }
 }
 parameters {
   real x0_mean;
   real<lower=0> sigma_x0;
   vector[S] x0; // initial states
-  vector[S] pro_dev[N-1];
+  //vector[S] pro_dev[N-1];
   vector[n_area] area_offset;
   real<lower=0> sigma_area;
   real U;
   real U_season;
   real<lower=0, upper=1> B;
-  real<lower=0> sigma_process;
+  // real<lower=0, upper=1> B_sum;
+  // real<lower=0> sigma_process;
   real<lower=0> sigma_obs;
   // real<lower=0> sigma_samp;
 }
@@ -43,7 +52,7 @@ transformed parameters {
   for(m in 1:M) {
     x[1,m] = x0[cohorts[m]] + area_offset[area[m]]; // initial state, vague prior below
     for(t in 2:N) {
-      x[t,m] = B*x[t-1,m] + U_season * seasons[t-1] + U + 
+      x[t,m] = B * x[t-1,m] + U + U_season * seasons[t-1] +
         pro_dev[t-1,cohorts[m]];
     }
   }
@@ -59,16 +68,17 @@ model {
   
   sigma_obs ~ normal(0.0, 2.0);
   // sigma_samp ~ normal(0.0, 2.0);
-  sigma_process ~ normal(0.0, 1.0);
+  // sigma_process ~ normal(0.0, 1.0); //1.0);
   
   U ~ normal(0.0,1.0);
   U_season ~ normal(0.0,1.0);
   //U_sex ~ normal(1.0, 1.0); // more females should magnify seasonal fluctuations
-  // B ~ beta(2,2);
-  B ~ beta(1,1);
-  for(i in 1:(N-1)){
-    pro_dev[i] ~ normal(0.0, sigma_process);
-  }
+  B ~ beta(2,2);
+  // B_sum ~ beta(2,2);
+  // B ~ beta(1,1);
+  // for(i in 1:(N-1)){
+  //   pro_dev[i] ~ normal(0.0, sigma_process);
+  // }
 
   // likelihood
   for(i in 1:n_pos) {

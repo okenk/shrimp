@@ -1,6 +1,7 @@
 ---
 title: "Shrimp modeling"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
 ---
@@ -9,24 +10,122 @@ output:
 library(rstan)
 library(tidyverse)
 library(here)
-load(here('Code/model_fit.RData'))
-load(here('Code/model_fit_tables.RData'))
+library(cowplot)
+source(here('Code/length_data_manip.R'))
+
+# extractor functions
+
+plot_pro_devs <- function(list_of_draws, lengths, y.df) {
+  yr.seq <- sort(unique(lengths$Year_Class))
+  # Var2 has 30 unique values, is monthly time steps
+  # Var3 has 32 unique values, is cohort
+  pro_devs <- reshape2::melt(list_of_draws$pro_dev, 
+                             value.name = 'pro_dev') %>% 
+    mutate(Year_Class = yr.seq[Var3],
+           Age_Month = round(as.numeric(
+             names(y.df)[-(1:2)][Var2]),2),
+           winter = Age_Month %in% c(1.83, 1.92, 2, 2.08, 2.17, 2.25,
+                                     2.83, 2.92, 3, 3.08, 3.17, 3.25))
+  
+  for(cohort in yr.seq) {
+    print(
+      filter(pro_devs, Year_Class == cohort) %>%
+        ggplot() +
+        geom_violin(aes(x = factor(Age_Month), y = pro_dev, 
+                        fill = winter)) +
+        geom_hline(yintercept = 0, col = 'red') +
+        theme_classic() +
+        ggtitle(cohort) +
+        xlab('Age (yrs)') +
+        ylab('Process error (mm)') +
+        scale_fill_manual(values = alpha(
+          c('tomato', 'royalblue3'), alpha = 0.5)))
+  }
+}
+
+calc_fitted_vals <- function(list_of_draws, y.mat, complete.data, 
+                             y.df) {
+  med.pred <- list_of_draws$pred_vec %>%
+    apply(2, median)
+  pred.mat <- matrix(nrow = nrow(y.mat), ncol = ncol(y.mat), 
+                     dimnames = list(rownames(y.mat), colnames(y.mat)))
+  for(ii in 1:nrow(complete.data)) {
+    pred.mat[complete.data[ii,1], complete.data[ii,2]] <- med.pred[ii] 
+  }
+  
+  length.fits <- as_tibble(pred.mat + mean(y.mat, na.rm=TRUE)) %>%
+    bind_cols(select(y.df, Area, Year_Class)) %>%
+    gather(key = 'Age_Month', value = 'MedPredLength', -Area, -Year_Class) %>%
+    mutate(Age_Month = as.numeric(Age_Month),
+           Age = floor(Age_Month),
+           Month_Num = round(12*(Age_Month - Age))) %>% 
+    select(-Age_Month) %>%
+    right_join(lengths)
+  
+  return(length.fits)
+}
+
+# Plot posterior predictive distributions
+plot_ppd_by_cohort <- function(length.fits, list_of_draws, offset) {
+  rec.hist <- filter(length.fits, Age==1) %>% 
+    group_by(Year_Class) %>% 
+    summarize(Std_R = first(Std_R)) %>%
+    ggplot() +
+    geom_violin(aes(y = Std_R, x = 'R')) +
+    theme_classic(8) +
+    xlab('') +
+    ylab('Rec')
+  
+  for(cohort in sort(unique(length.fits$Year_Class))) {
+    this.cohort.data <- filter(length.fits, Year_Class == cohort)
+    cohort.index <- which(length.fits$Year_Class == cohort)
+    
+    inset <- rec.hist 
+    if(cohort >= 1988) {
+      inset <- inset +
+        annotate(geom = 'point', x = 'R',
+                 y = this.cohort.data$Std_R[1], 
+                 col = 'red')
+    }
+    
+    main.plot <- bayesplot::ppc_violin_grouped(
+      y = this.cohort.data$Avg_Len,
+      yrep = list_of_draws$y_pp[,cohort.index] +
+        mean(length.fits$Avg_Len) * offset, 
+      group = factor(round(this.cohort.data$Age_Month, 2)),
+      y_draw = 'points'
+    ) +
+      xlab('Age (yrs)') +
+      ylab('Length (mm)') +
+      ggtitle(cohort) +
+      geom_vline(xintercept = c(7.5,14.5))
+    
+    print(
+      ggdraw(main.plot) +
+        draw_plot(inset, x = .15, y = .65,
+                  width = .15, height = .3)
+    )
+  }
+}  
+# load(here('Code/model_fit.RData'))
+# load(here('Code/model_fit_tables.RData'))
 ```
 
 ## Data:
+
 Data we have at month-year-fishing area resolution:
 
-* Average length and sample size for each age class (1-3) from April to October, i.e., up to 21 observations of each year class in a given area, but some combinations are missing. This is from sampling the catch.
-* SD for each age class from 2014-2018 (actually have individual data for each shrimp measured in these years)
-* Total catch in lbs
-* Count per pound
-* Percent age composition of the catch by number
-* All of this for 1989-2018, though a lot of pubs seems to have 1980-present
+-   Average length and sample size for each age class (1-3) from April to October, i.e., up to 21 observations of each year class in a given area, but some combinations are missing. This is from sampling the catch.
+-   SD for each age class from 2014-2018 (actually have individual data for each shrimp measured in these years)
+-   Total catch in lbs
+-   Count per pound
+-   Percent age composition of the catch by number
+-   All of this for 1989-2018, though a lot of pubs seems to have 1980-present
 
 Here is a (different) plot of the mean lengths at age by area and year class.
 
 ```{r, echo = FALSE, fig.height = 6, fig.width = 6, warning=FALSE, message=FALSE}
-ggplot(length.fits, aes(x = Age_Month, y = Avg_Len, group = paste(Year_Class, Area), col = Year_Class)) +
+ggplot(lengths, aes(x = Age_Month, y = Avg_Len, group = paste(Year_Class, Area), col = Year_Class)) +
   geom_path(lwd = .25, alpha = 0.5) +
   geom_point(cex=.5, alpha = 0.5) +
   facet_wrap(~Area, drop = TRUE) +
@@ -36,44 +135,138 @@ ggplot(length.fits, aes(x = Age_Month, y = Avg_Len, group = paste(Year_Class, Ar
 
 Here is a map of the state areas:
 
-![](../Figures/shrimp_areas.png){height=4in}
+![](../Figures/shrimp_areas.png){height="4in"}
+
+### L vs $\Delta$ L
+The following plot shows change in length vs length. It is a subset of the total data set and only includes cases where sampling was conducted in the same state area for two consecutive months. The red line is the linear regression. It is not great and very noisy. 
+
+```{r, echo=FALSE, message=FALSE}
+lengths %>%
+  group_by(Area, Year_Class) %>%
+  arrange(Age_Month, .by_group = TRUE) %>%
+  mutate(is_consecutive = round(c(diff(Age_Month),NA),2) == .08,
+         delta_L = c(diff(Avg_Len), NA)) %>% 
+  filter(is_consecutive) %>%
+  ggplot(aes(x = Avg_Len, y = delta_L)) +
+  geom_point(aes(col = Year_Class), alpha = 0.25) +
+  stat_smooth(method = 'lm', col = 'red') +
+  theme_classic() +
+  xlab('Length (mm)') +
+  ylab(expression(paste(Delta, 'Length (mm)')))
+
+```
 
 
-## Model:
+## Linear model:
+
 $L_{a,y,r}$ is length of age $a$ (in months) shrimp from the cohort $c$ caught in area (region) r, and $m$ is the month of the year (i.e., cycles back to 1 at the end of the year unlike $a$). To align $m$ with the seasonal cycle of growth, $m=1$ corresponds with March.
 
 $$\begin{aligned}
 L_{1,c,r} &= \mu_{L1} + \gamma_{r} + \varepsilon_{1,c} \\
-L_{a,c,r} &= \alpha_0 + \alpha_1 L_{a-1,c,r} + \alpha_s \sin\left(\tfrac{\pi m}{6}\right) + \varepsilon_{a,c,r} \\
+L_{a,c,r} &= \alpha_0 + \alpha_1 L_{a-1,c,r} + \alpha_s \sin\left(\tfrac{\pi m}{6}\right) + \varepsilon_{a,c} \\
 \hat{L}_{a,c,r} &= L_{a,c,r} + \delta_{a,c,r}
 \end{aligned}$$
 
-$\mu_{L1}$ is average size of age 1 shrimp in April, $\alpha_0$ and $\alpha_1$ describe the average monthly growth, and $\alpha_s$ is the magnitude of the seasonality component. 
+$\mu_{L1}$ is average size of age 1 shrimp in April, $\alpha_0$ and $\alpha_1$ describe the average monthly growth, and $\alpha_s$ is the magnitude of the seasonality component.
 
-Distributional assumptions are:
-$$\begin{aligned}
+Distributional assumptions are: $$\begin{aligned}
 \varepsilon_{1,c} &\sim N(0, \sigma_{L1}) \\
 \varepsilon_{a,c} &\sim N(0, \sigma_p), a\neq 1\\
 \delta_{a,c,r} &\sim N(0, \sigma_o)\\
 \gamma_r &\sim N(0, \sigma_r)
 \end{aligned}$$
 
+## Non-linear parameterization
+
+A second parameterization was explored that allows the seasonal component to solely influence the growth rate, and not the asymptotic size. Only the second equation is different than the model above (instead of $\alpha_0$ and $\alpha_1$, the two model parameters are $L_\infty$ and $k$):
+
+$$
+L_{a,c,r} = L_\infty\left[1-\exp\left(-ke^{\alpha_s\sin\left(\pi m/6\right)} \right) \right] + L_{a-1,c,r}\exp\left(-ke^{\alpha_s\sin\left(\pi m/6\right)}\right) + \varepsilon_{a,c}
+$$
+
 ## Fitting:
 
-The model is fit in Stan as a multivariate autoregressive state-space model. The global mean is subtracted from all lengths to improve numerical stability. Each year class is essentially a different "state", and each area represents a different observation process of the same state. Three chains are run for 5000 iterations, and the final 2500 iterations of each chain are retained. [More chains fewer iterations?]
+The model is fit in Stan as a multivariate autoregressive state-space model. For the linear model, the global mean is subtracted from all lengths to improve numerical stability. Each year class is essentially a different "state", and each area represents a different observation process of the same state. Three chains are run for 5000 iterations, and the final 2500 iterations of each chain are retained. [More chains fewer iterations?] This is probably not sufficient for formal estimation, but seemed good enough for a first pass at major patterns.
+
+## Diagnostics
+
+Now we'll look at posterior predictive intervals for the linear and non-linear models with and without process errors (i.e., fixing $\varepsilon_{a,c}$ to zero and not estimating $\delta_p$). The inset plot is a distribution of recruitment across years with that cohort's recruitment in red.
+
+### Linear model with process error
+
+```{r, warning=FALSE, echo=FALSE, message=FALSE}
+load(here('Code/model_fit.RData'))
+list_of_draws <- rstan::extract(mod)
+```
+
+```{r, warning=FALSE, echo=FALSE, message=FALSE, eval=FALSE}
+length.fits <- calc_fitted_vals(list_of_draws, y.mat, complete.data, y.df)
+plot_ppd_by_cohort(length.fits, list_of_draws, offset = TRUE)
+```
+
+Posterior distributions of the process errors. The "winter" colors are missing data on the lengths either before the growth increment, after the growth increment, or both. The "non-winter" colors have observed lengths on both sides of the growth increment.
+
+```{r, echo=FALSE, fig.height=4}
+plot_pro_devs(list_of_draws, lengths, y.df)
+```
+
+### Linear model without process error
+
+```{r, warning=FALSE, echo=FALSE, message=FALSE}
+load(here('Code/model_fit_obs_only.RData'))
+list_of_draws <- rstan::extract(mod)
+```
+
+```{r, warning=FALSE, echo=FALSE, message=FALSE, eval=FALSE}
+length.fits <- calc_fitted_vals(list_of_draws, y.mat, complete.data, y.df)
+plot_ppd_by_cohort(length.fits, list_of_draws, offset = FALSE)
+```
+
+
+### Non-linear model with process error
+
+```{r, warning=FALSE, echo=FALSE, message=FALSE}
+load(here('Code/model_fit_vbgf.RData'))
+list_of_draws <- rstan::extract(mod)
+```
+
+```{r, warning=FALSE, echo=FALSE, message=FALSE, eval=FALSE}
+length.fits <- calc_fitted_vals(list_of_draws, y.mat, complete.data, y.df)
+plot_ppd_by_cohort(length.fits, list_of_draws, offset = FALSE)
+```
+
+Posterior distributions of the process errors. The "winter" colors are missing data on the lengths either before the growth increment, after the growth increment, or both. The "non-winter" colors have observed lengths on both sides of the growth increment.
+
+```{r, echo=FALSE, fig.height=4}
+plot_pro_devs(list_of_draws, lengths, y.df)
+```
+
+### Non-linear model without process error
+
+```{r, warning=FALSE, echo=FALSE, message=FALSE}
+load(here('Code/model_fit_vbgf_obs_only.RData'))
+list_of_draws <- rstan::extract(mod)
+```
+
+```{r, warning=FALSE, echo=FALSE, message=FALSE, eval=FALSE}
+length.fits <- calc_fitted_vals(list_of_draws, y.mat, complete.data, y.df)
+plot_ppd_by_cohort(length.fits, list_of_draws, offset = FALSE)
+```
+
 
 # Results:
 
-First, here is a table of the estimated parameters. The mixing for the initial size (not just the mean below, but also the parameters for each year and for the fishing area offsets) is poor, so the model should probably get run longer. 
-```{r, echo = FALSE}
+First, here is a table of the estimated parameters. The mixing for the initial size (not just the mean below, but also the parameters for each year and for the fishing area offsets) is poor, so the model should probably get run longer.
+
+```{r, echo = FALSE, eval=FALSE}
 mod.summary <- summary(mod, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U_season', 'U', 'B', 'sigma_process', 'sigma_obs'))$summary
 row.names(mod.summary) <- c('$\\mu_{L1}$', '$\\sigma_{L1}$', '$\\sigma_r$', '$\\alpha_s$', '$\\alpha_0$', '$\\alpha_1$', '$\\sigma_p$', '$\\sigma_o$')
 knitr::kable(mod.summary)
 ```
 
-Second, here is a plot of residuals versus fitted values (using the median from the posterior as the fitted value) with a smoother. We see that the residuals look alright. 
+Second, here is a plot of residuals versus fitted values (using the median from the posterior as the fitted value) with a smoother. We see that the residuals look alright.
 
-```{r, echo = FALSE, warning=FALSE, message=FALSE}
+```{r, echo = FALSE, warning=FALSE, message=FALSE, eval=FALSE}
 ggplot(length.fits, aes(x = MedPredLength, y = Avg_Len - MedPredLength)) +
   geom_point(alpha = .5) + 
   stat_smooth() +
@@ -83,8 +276,7 @@ ggplot(length.fits, aes(x = MedPredLength, y = Avg_Len - MedPredLength)) +
   NULL  
 ```
 
-
-```{r, echo = FALSE, warning=FALSE}
+```{r, echo = FALSE, warning=FALSE, eval=FALSE}
 ggplot(length.fits) +
   geom_boxplot(aes(x = factor(Year), y = Avg_Len - MedPredLength)) +
   geom_hline(yintercept = 0, col = 'red') +
@@ -99,7 +291,8 @@ ggplot(length.fits) +
 ```
 
 I also thought it would be useful to look at the process errors. We can see that the process model under-estimates growth for age 1 and over-estimates it for age 3. Oddly, $\alpha_1$ is being estimated very close to its bound at 1. If it were smaller, that would allow growth to slow as shrimp get larger. Strong priors with minimal weight near 1 did not change this, but did slow mixing.
-```{r, echo = FALSE}
+
+```{r, echo = FALSE, eval=FALSE}
 ggplot(pro.dev) + 
   geom_boxplot(aes(x = factor(Age_Month), y = pro.dev)) +
   geom_hline(yintercept = 0, col = 'red') +
@@ -116,10 +309,9 @@ ggplot(pro.dev) +
 ```
 
 ## Next steps:
-1. Does anyone have any thoughts on why faster growth during the first year and slower growth especially during the second winter and age 3 are getting shunted into random effects? Is it important to fix? I'm not weighting anything by sample size. Maybe age 3 mean lengths are unreliable and need to be down-weighted? I recall that I tried doing that and the results were wonky for some reason. Maybe the data are just not informative enough for such a data-hungry state-space model? 
 
-2. Compare with condition index (have data), look at possible oceanographic and density-related correlates with growth and condition?
+1.  Does anyone have any thoughts on why faster growth during the first year and slower growth especially during the second winter and age 3 are getting shunted into random effects? Is it important to fix? I'm not weighting anything by sample size. Maybe age 3 mean lengths are unreliable and need to be down-weighted? I recall that I tried doing that and the results were wonky for some reason. Maybe the data are just not informative enough for such a data-hungry state-space model?
 
+2.  Compare with condition index (have data), look at possible oceanographic and density-related correlates with growth and condition?
 
 <!-- Martell et al. 2000 report annual M of 0.96 $\text{yr}^{-1}$, which is used in VPA.  -->
-

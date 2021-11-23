@@ -1,7 +1,43 @@
+# extractor functions
+
+calc_pro_devs <- function(list_of_draws) {
+  pro.dev <- list_of_draws$pro_dev %>%
+    apply(2:3, median) %>% 
+    as_tibble() %>%
+    rename_with(~ 1986:2017) %>%
+    mutate(Age_Month = as.numeric(names(y.df)[-c(1:2,21)])) %>%
+    pivot_longer(cols = -Age_Month, names_to = 'Year_Class', values_to = 'pro.dev') %>%
+    mutate(Year_Class = as.numeric(Year_Class))
+  
+  return(pro.dev)
+}
+
+calc_fitted_vals <- function(list_of_draws, y.mat, complete.data, y.df) {
+  med.pred <- list_of_draws$pred_vec %>%
+    apply(2, median)
+  pred.mat <- matrix(nrow = nrow(y.mat), ncol = ncol(y.mat), 
+                     dimnames = list(rownames(y.mat), colnames(y.mat)))
+  for(ii in 1:nrow(complete.data)) {
+    pred.mat[complete.data[ii,1], complete.data[ii,2]] <- med.pred[ii] 
+  }
+  
+  length.fits <- as_tibble(pred.mat + mean(y.mat, na.rm=TRUE)) %>%
+    bind_cols(select(y.df, Area, Year_Class)) %>%
+    gather(key = 'Age_Month', value = 'MedPredLength', -Area, -Year_Class) %>%
+    mutate(Age_Month = as.numeric(Age_Month),
+           Age = floor(Age_Month),
+           Month_Num = round(12*(Age_Month - Age))) %>% 
+    select(-Age_Month) %>%
+    right_join(lengths)
+  
+  return(length.fits)
+}
+
 # run model ---------------------------------------------------------------
 
-mod <- stan('Code/growth_model.stan', 
-            data = list(N = N, M = M, y = y.vec - mean(y.vec), cohorts = cohorts, 
+mod <- stan('Code/growth_model_vbgf.stan', 
+            data = list(N = N, M = M, y = y.vec, #- mean(y.vec), 
+                        cohorts = cohorts, 
                         S = max(cohorts), 
                         # obsVariances = obsVariances, 
                         # n_obsvar = max(obsVariances), proVariances = proVariances, 
@@ -11,39 +47,24 @@ mod <- stan('Code/growth_model.stan',
                         n_pos = n_pos, col_indx_pos = complete.data[,2], 
                         row_indx_pos = complete.data[,1],
                         calc_ppd = 1, samp_size = n.vec), 
-            pars = c('x0_mean', 'sigma_x0', 'x0', 'area_offset', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs', 
-                     'pred_vec', 'pro_dev', 'y_pp'), 
+            pars = c('x0_mean', 'sigma_x0', 'x0', 'area_offset', 'sigma_area','k', 'k_season', 'linf', 
+                     #'U', 'B', 'U_season', 
+                     'sigma_process', 
+                     'sigma_obs', 
+                     'pred_vec', 
+                     'pro_dev', 
+                     'y_pp'), 
             chains = 3, iter = mcmc_list$n_mcmc, cores = 3,
             #thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
             control = list(adapt_delta = 0.9, max_treedepth = 10))
-save(mod, file = here('Code/model_fit.RData'))
+save(mod, file = here('Code/model_fit_vbgf.RData'))
 
 pairs(mod, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs', 'lp__'))
 xx <- as.shinystan(mod)
-launch_shinystan(drop_parameters(xx, pars = c('pro_dev', 'y_pp', 'pred_vec')))
+launch_shinystan(drop_parameters(xx, pars = c('pro_dev','y_pp', 'pred_vec')))
 xx <- summary(mod, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs'))$summary
 
 summary(mod.vague.priors, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs', 'lp__'))$summary
-
-mod.spatiotemporal <- stan('Code/growth_model_spatiotemporal.stan', 
-                           data = list(N = N, M = M, y = y.vec - mean(y.vec), cohorts = cohorts, 
-                                       S = max(cohorts), 
-                                       # obsVariances = obsVariances, 
-                                       # n_obsvar = max(obsVariances), proVariances = proVariances, 
-                                       # n_provar = max(proVariances), trends = trends, 
-                                       # n_trends = max(trends), 
-                                       n_area = max(areas), area = areas, #area.vec,
-                                       n_pos = n_pos, col_indx_pos = complete.data[,2], 
-                                       row_indx_pos = complete.data[,1], 
-                                       return_preds = 1, calc_ppd = 0,
-                                       area_centers = area.locations$Centroid[1:max(areas)]), # There is an NA at the end of the data frame because the centroids are diff(latitude)
-                           pars = c('x0_mean', 'sigma_x0', 'x0', 'area_offset', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs', 'gp_theta', 'gp_sigma', 
-                                    'pred_vec', 'pro_dev'), 
-                           chains = 3, iter = mcmc_list$n_mcmc, cores = 3,
-                           thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
-                           control = list(adapt_delta = 0.9, max_treedepth = 15))
-pairs(mod.spatiotemporal, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'rho', 'alpha', 'B', 'sigma_process', 'sigma_obs', 'lp__'))
-launch_shinystan(mod.spatiotemporal, )
 
 
 # post-processing ---------------------------------------------------------
@@ -52,13 +73,6 @@ launch_shinystan(mod.spatiotemporal, )
 
 list_of_draws <- rstan::extract(mod)
 
-pro.dev <- list_of_draws$pro_dev %>%
-  apply(2:3, median) %>% 
-  as_tibble() %>%
-  rename_with(~ 1986:2017) %>%
-  mutate(Age_Month = names(y.df)[-c(1:2,21)]) %>%
-  pivot_longer(cols = -Age_Month, names_to = 'Year_Class', values_to = 'pro.dev') %>%
-  mutate(Year_Class = as.numeric(Year_Class))
 
 ## initial size deviations
 
@@ -74,25 +88,6 @@ x0.dev <- list_of_draws$x0 %>%
   left_join(biomass)
 
  ## observation errors
-
-med.pred <- list_of_draws$pred %>%
-  apply(2, median)
-pred.mat <- matrix(nrow = nrow(y.mat), ncol = ncol(y.mat), 
-                   dimnames = list(rownames(y.mat), colnames(y.mat)))
-for(ii in 1:nrow(complete.data)) {
-  pred.mat[complete.data[ii,1], complete.data[ii,2]] <- med.pred[ii] 
-}
-
-length.fits <- as_tibble(pred.mat + mean(y.mat, na.rm=TRUE)) %>%
-  bind_cols(select(y.df, Area, Year_Class)) %>%
-  gather(key = 'Age_Month', value = 'MedPredLength', -Area, -Year_Class) %>%
-  mutate(Age_Month = as.numeric(Age_Month),
-         Age = floor(Age_Month),
-         Month_Num = round(12*(Age_Month - Age))) %>% 
-  select(-Age_Month) %>%
-  right_join(lengths)
-
-save(length.fits, pro.dev, x0.dev, file = here('Code/model_fit_tables.RData'))
 
 
 # Plotting ----------------------------------------------------------------
@@ -125,7 +120,55 @@ png('Figures/covariates.png', width = 10, height = 5, units = 'in', res=500)
 gridExtra::grid.arrange(ssh.plot, bio.plot, nrow = 1)
 dev.off()
 
+## Observation error boxplot by age
+length.fits %>%
+  ggplot() +
+  geom_boxplot(aes(x = factor(round(Age_Month, 2)), y = Avg_Len - MedPredLength)) +
+  geom_hline(yintercept=0, col = 'red') +
+  facet_wrap(~Area) +
+  xlab('Age (yrs)') +
+  ylab('Obs length - Pred length')
 
+## posterior predictive interval by age
+pdf('Figures/ppc_vbgf_obs_only.pdf')
+for(cohort in sort(unique(length.fits$Year_Class))) {
+  this.cohort.data <- filter(length.fits, Year_Class == cohort)
+  cohort.index <- which(length.fits$Year_Class == cohort)
+  print(bayesplot::ppc_violin_grouped(y = this.cohort.data$Avg_Len,
+                                yrep = list_of_draws$y_pp[,cohort.index],
+                                group = factor(round(this.cohort.data$Age_Month, 2)),
+                                y_draw = 'points') +
+    xlab('Age (yrs)') +
+    ylab('Length (mm)') +
+    ggtitle(cohort))
+}
+dev.off()
+
+plot.data <- bayesplot::ppc_data(y = length.fits$Avg_Len, 
+                     yrep = list_of_draws$y_pp + mean(length.fits$Avg_Len),
+                     group = factor(round(length.fits$Age_Month, 2))) %>%
+  left_join(data.frame(group2 = length.fits$Year_Class, y_id = 1:nrow(length.fits)),
+            by = "y_id")
+
+
+base.plot <- bayesplot::ppc_violin_grouped(y = length.fits$Avg_Len,
+                                           yrep = list_of_draws$y_pp + 
+                                             mean(length.fits$Avg_Len),
+                                           group = factor(round(
+                                             length.fits$Age_Month, 2)),
+                                           y_draw = 'points')
+  
+base.plot %+%
+  plot.data +
+  facet_wrap(~ group2)
+
+
+facet_wrap(~c(rep(length.fits$Year_Class, each = 7500), length.fits$Year_Class)) +
+  xlab('Age (years)') + 
+  ylab('Length (mm)')
+
+xx + 
+  facet_wrap(~length.fits$Year_Class) 
 
 pro.dev %>%
   mutate(Year = Year_Class + floor(Age_Month)) %>%

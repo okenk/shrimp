@@ -6,7 +6,6 @@ Figures/*
 Code/mcmc_run.RData
 Data/allshrimptickets1980-2019.xlsx
 *.RData
-<<<<<<< HEAD
+*.pdf
+*.png
 Data/allshrimp.xlsx
-=======
->>>>>>> 2c5d46a5db423c972e8cbdd96fc1b8773167f110
