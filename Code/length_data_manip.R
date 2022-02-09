@@ -63,7 +63,12 @@ y.df <- lengths %>%
   bind_rows(tibble(Age_Month = c(1+11/12, 2 + c(0, 1/12, 2/12, 3/12, 11/12), 3+c(0, 1/12, 2/12, 3/12)),
                    Year_Class = 2015, Area = as.character(12))) %>% # This adds columns for wintertime months
   select(-Month, -Age, -Month_Num, -Year, -sd) %>%
-  spread(key = Age_Month, value = Avg_Len) 
+  spread(key = Age_Month, value = Avg_Len) %>%
+  mutate(Big_Area = case_when(Area <= 18 ~ 3,
+                   Area <= 22 ~ 1,
+                   Area <= 28 ~ 2,
+                   TRUE ~ 4)) %>%
+  relocate(Big_Area, .after = Area)
 
 y.mat <- y.df %>%
   select(-(Area:Year_Class)) %>%
@@ -84,12 +89,13 @@ area.mat <- as.numeric(as.factor(y.df$Area)) %>%
                          rep(N) %>%
                          matrix(nrow = M, ncol = N)
 
-to.add <- names(y.df)[-(1:2)] %>%
+to.add <- select(y.df, !(Area:Year_Class)) %>% 
+  names() %>%
   as.numeric() %>%
   floor()
 
 year.df <- y.df
-year.df[,-(1:2)] <- sapply(y.df$Year_Class, function(x) x + to.add) %>% t()
+year.df[,-(1:3)] <- sapply(y.df$Year_Class, function(x) x + to.add) %>% t()
 
 ssh.mat <- bio.mat <- year.df %>%
   mutate_at(vars(-(Area:Year_Class)), function(.x) as.numeric(NA)) %>%
@@ -118,6 +124,7 @@ n.vec <- n.mat[which(!is.na(y.mat))]
 
 cohorts <- as.numeric(as.factor(y.df$Year_Class))
 areas <- as.numeric(as.factor(y.df$Area))
+big.areas <- y.df$Big_Area
 
 area.locations <- here('Data/area_locations.csv') %>%
   read_csv() %>%

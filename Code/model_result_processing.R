@@ -34,31 +34,41 @@ calc_fitted_vals <- function(list_of_draws, y.mat, complete.data, y.df) {
 }
 
 # run model ---------------------------------------------------------------
-
-mod <- stan('Code/growth_model_vbgf.stan', 
-            data = list(N = N, M = M, y = y.vec, #- mean(y.vec), 
-                        cohorts = cohorts, 
-                        S = max(cohorts), 
-                        # obsVariances = obsVariances, 
-                        # n_obsvar = max(obsVariances), proVariances = proVariances, 
-                        # n_provar = max(proVariances), trends = trends, 
-                        # n_trends = max(trends), 
-                        n_area = max(areas), area = areas, #area.vec,
-                        n_pos = n_pos, col_indx_pos = complete.data[,2], 
-                        row_indx_pos = complete.data[,1],
-                        calc_ppd = 1, samp_size = n.vec), 
-            pars = c('x0_mean', 'sigma_x0', 'x0', 'area_offset', 'sigma_area','k', 'k_season', 'linf', 
-                     #'U', 'B', 'U_season', 
-                     'sigma_process', 
-                     'sigma_obs', 
-                     'pred_vec', 
-                     'pro_dev', 
-                     'y_pp'), 
-            chains = 3, iter = mcmc_list$n_mcmc, cores = 3,
-            #thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
-            control = list(adapt_delta = 0.9, max_treedepth = 10))
-save(mod, file = here('Code/model_fit_vbgf.RData'))
-
+for(ii in 1) {
+  mod <- stan('Code/growth_model.stan', 
+              data = list(N = N, M = M, y = y.vec - mean(y.vec),  
+                          cohorts = cohorts, 
+                          S = max(cohorts), 
+                          n_area = max(areas), area = areas,
+                          n_big_area = c(1, rep(max(big.areas), 2))[ii], 
+                          big_area = cbind(1, big.areas, big.areas)[,ii],
+                          n_pos = n_pos, col_indx_pos = complete.data[,2], 
+                          row_indx_pos = complete.data[,1], 
+                          est_pro_dev = 1,
+                          est_area_offset = c(1,0,1)[ii],
+                          calc_ppd = 1, samp_size = n.vec), 
+              pars = c('x0_mean', 'sigma_x0', 'x0', 
+                       list('area_offset', NULL, 'area_offset')[[ii]],
+                       'sigma_area', 
+                       'U', 'B', 'U_season', 
+                       'sigma_process', 
+                       'sigma_obs', 
+                       'pred_vec', 
+                       'pro_dev', 
+                       'y_pp'), 
+              iter = 4000, chains = 4, cores = 4,
+              #iter=100, chains=1,
+              #thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
+              control = list(adapt_delta = 0.9, max_treedepth = 10))
+  save(mod, file = here(paste0('Code/model_fit', 
+                               c('', '_big_area_no_offset', '_big_area')[ii],
+                               '.RData'
+                               )
+                        )
+       )
+  print(ii)
+}
+  
 pairs(mod, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs', 'lp__'))
 xx <- as.shinystan(mod)
 launch_shinystan(drop_parameters(xx, pars = c('pro_dev','y_pp', 'pred_vec')))
@@ -66,6 +76,16 @@ xx <- summary(mod, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U', 'U_season'
 
 summary(mod.vague.priors, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U', 'U_season', 'B', 'sigma_process', 'sigma_obs', 'lp__'))$summary
 
+png(filename = 'Figures/pairs.png', width = 10, height = 10, units = 'in', res = 200)
+pairs(mod.simple, pars=grep('x0', names(mod.simple@sim$samples[[1]]), value = TRUE))
+dev.off()
+
+# Time for fitting simple model:
+# warmup  sample
+# chain:1 1808.70 1133.11
+# chain:2 1736.42 1140.81
+# chain:3 2135.00 1014.67
+# chain:4 1731.44 1263.76
 
 # post-processing ---------------------------------------------------------
 
