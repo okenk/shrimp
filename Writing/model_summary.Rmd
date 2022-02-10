@@ -180,15 +180,13 @@ Distributional assumptions are: $$\begin{aligned}
 
 Note that the assumption for $\varepsilon_{1,c,r}$ implies that there is a single initial size estimated for each "mega-region" $R$ for each cohort $c$. There is a global mean initial size ($\mu_{L1}$), but there is no additional hierarchy (i.e., no mega-regions within years or years within mega-regions).
 
-There were also two simpler models fit. One with the initial size equation as:
+There was also a simpler model fit with the initial size equation as:
 
 $$
 L_{1,c,r} = \mu_{L1} + \gamma_{r} + \varepsilon_{1,c}
 $$
 
 The key change here is that the annual variation in initial size is coast-wide rather than estimated separately for each "mega-region." This would not permit an analysis at as detailed a level of organization as the recruitment, but was fit for comparison.
-
-The second variation did estimate the "mega-region" effects each year but did not estimate the $\gamma_r$'s or $\sigma_r$. Although there is clear evidence of lengths decreasing as you go up the coast, this phenomenon can still be captured somewhat with the "mega-region" effects. This variation was also a test to see if there was a way to improve MCMC mixing (see below).
 
 ## Non-linear parameterization
 
@@ -201,94 +199,32 @@ $$
 Because earlier analyses showed similar results for this model but much longer run times, results from it are not included.
 
 ## Fitting:
-
-The model is fit in Stan as a multivariate autoregressive state-space model. For the linear model, the global mean is subtracted from all lengths to improve numerical stability. Each year class is essentially a different "state", and each area represents a different observation process of the same state. Four chains are run for 5000 iterations, and the final 2500 iterations of each chain are retained. This is probably not sufficient for formal estimation, but seemed good enough for a first pass at major patterns.
-
-The mixing on all parameters associated with initial size is quite poor. For most of these parameters, effective sample size is \<10% of the total sample size. BUT R hat is close to one. I can try running it longer, but that will come back to bit us when we do variable selection...
-
-Effective sample sizes for these parameters are:
-
 ```{r, echo=FALSE}
-load(here('Code/model_fit.Rdata'))
-mod.simple <- mod
-load(here('Code/model_fit_big_area.Rdata'))
-mod.mega.region <- mod
-
-mod.list <- list(Simple = mod.simple, `Mega-region` = mod.mega.region)
-mcmc.res.list <- sapply(mod.list, function(x)
-  rstan::summary(x, pars = # select initial size paramters only
-          c(grep('x0', names(x@sim$samples[[1]]), value = TRUE), 
-            grep('area', names(x@sim$samples[[1]]), value = TRUE)),
-          probs = c())$summary[,c('n_eff','Rhat')] # aggregated chains
-)
-
-mcmc.res.arr <- array(dim = c(5, 
-                              ncol(mcmc.res.list[[1]]),
-                              length(mod.list)),
-                      dimnames = list(
-                        c('$\\mu_{L1}$',
-                          '$\\sigma_{L1}$',
-                          'Mean $\\varepsilon_{1,c,r}$', 
-                          'Mean $\\gamma_r$', 
-                          '$\\sigma_r$'),
-                        c('ESS', 'Rhat'),
-                        names(mod.list)
-                      )
-)
-
-
-mcmc.res.arr[1:2,,] <- sapply(mcmc.res.list, function(x) x[1:2,])
-mcmc.res.arr[3,,] <- sapply(mcmc.res.list, function(x)
-  apply(x[grep('x0\\[', rownames(x)),], 2, max)
-)
-mcmc.res.arr[4,,] <- sapply(mcmc.res.list, function(x)
-  apply(x[grep('area_offset', rownames(x)),], 2, mean)
-)
-
-mcmc.res.arr[5,,] <- sapply(mcmc.res.list, function(x)
-                     x[grep('sigma_area', rownames(x)),]
-                     )
-
-round(mcmc.res.arr[,'ESS',], 0) %>%
-  knitr::kable()
-
-# total sample size = 10k
-
+load(here('Code', 'model_fit_big_area.RData'))
+mod.summary <- summary(mod)
 ```
 
-For $\varepsilon$ and $\gamma$ the effective sample sizes reported are average effective sample sizes across all years/areas/mega-regions (as appropriate). When reported as the percent of total sample size it is clear how abysmal the mixing is:
 
-```{r, echo=FALSE}
-knitr::kable(
-  mcmc.res.arr[,'ESS',] / with(mod.simple@sim, (iter-warmup)*chains),
-  digits = 3, drop0trailing = FALSE)
-
-```
-
-*However*, the chains to appear to have converged to a stationary distribution, as evidenced by $\hat{R}$:
-
-```{r, echo=FALSE}
-
-knitr::kable(mcmc.res.arr[,'Rhat',], digits = 3, drop0trailing = FALSE)
-```
-
-(Although the $\hat{R}$ values are averaged for $\varepsilon$ and $\gamma$, there is very little variability, and the maximum $\hat{R}$ is close to the mean.)
-
-**Question**: What is an acceptable effective sample size?
+The model is fit in Stan as a multivariate autoregressive state-space model. For the linear model, the global mean is subtracted from all lengths to improve numerical stability. Each year class is essentially a different "state", and each area represents a different observation process of the same state. Four chains are run for 4000 iterations, and the final 2000 iterations of each chain are retained. The lowest effective sample size is `r round(min(mod.summary$summary[,'n_eff']), 0)` and the largest $\hat{R}$ is `r round(max(mod.summary$summary[,'Rhat']), 3)`, indicating chains have converged and produced a sufficient number of independent draws to conduct inference. It takes `r round(max(apply(get_elapsed_time(mod), 1, sum))/60, 1)` minutes to run on my laptop including warmup, with the chains running in parallel. We may be able to decrease iterations a bit more for efficiency
 
 # Results:
 
-First, here is a table of the estimated parameters. The mixing for the initial size (not just the mean below, but also the parameters for each year and for the fishing area offsets) is poor, so the model should probably get run longer.
+First, here is a table of the estimated parameters.
 
-```{r, echo = FALSE, eval=FALSE}
-mod.summary <- summary(mod.mega.region, pars = c('x0_mean', 'sigma_x0', 'sigma_area', 'U_season', 'U', 'B', 'sigma_process', 'sigma_obs'))$summary
-row.names(mod.summary) <- c('$\\mu_{L1}$', '$\\sigma_{L1}$', '$\\sigma_r$', '$\\alpha_s$', '$\\alpha_0$', '$\\alpha_1$', '$\\sigma_p$', '$\\sigma_o$')
-knitr::kable(mod.summary)
+```{r, echo = FALSE}
+mod.summary.subset <- mod.summary$summary[c('x0_mean', 'sigma_x0', 'sigma_area', 'U_season', 'U', 'B', 'sigma_process', 'sigma_obs'),]
+row.names(mod.summary.subset) <- c('$\\mu_{L1}$', '$\\sigma_{L1}$', '$\\sigma_r$', '$\\alpha_s$', '$\\alpha_0$', '$\\alpha_1$', '$\\sigma_p$', '$\\sigma_o$')
+knitr::kable(mod.summary.subset, digits = 2)
 ```
 
 Second, here is a plot of residuals versus fitted values (using the median from the posterior as the fitted value) with a smoother. We see that the residuals look alright.
 
-```{r, echo = FALSE, warning=FALSE, message=FALSE, eval=FALSE}
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+list_of_draws <- rstan::extract(mod)
+
+length.fits <- calc_fitted_vals(list_of_draws = list_of_draws, y.mat = y.mat, 
+                                complete.data = complete.data, y.df = y.df)
+
 ggplot(length.fits, aes(x = MedPredLength, y = Avg_Len - MedPredLength)) +
   geom_point(alpha = .5) + 
   stat_smooth() +
@@ -298,7 +234,7 @@ ggplot(length.fits, aes(x = MedPredLength, y = Avg_Len - MedPredLength)) +
   NULL  
 ```
 
-```{r, echo = FALSE, warning=FALSE, eval=FALSE}
+```{r, echo = FALSE, warning=FALSE}
 ggplot(length.fits) +
   geom_boxplot(aes(x = factor(Year), y = Avg_Len - MedPredLength)) +
   geom_hline(yintercept = 0, col = 'red') +
@@ -314,15 +250,26 @@ ggplot(length.fits) +
 
 I also thought it would be useful to look at the process errors. We can see that the process model under-estimates growth for age 1 and over-estimates it for age 3. Oddly, $\alpha_1$ is being estimated very close to its bound at 1. If it were smaller, that would allow growth to slow as shrimp get larger. Strong priors with minimal weight near 1 did not change this, but did slow mixing.
 
-```{r, echo = FALSE, eval=FALSE}
-ggplot(pro.dev) + 
-  geom_boxplot(aes(x = factor(Age_Month), y = pro.dev)) +
+```{r, echo = FALSE}
+yr.seq <- sort(unique(lengths$Year_Class))
+# Var2 has 30 unique values, is monthly time steps
+# Var3 has 32 unique values, is cohort
+pro_devs <- reshape2::melt(list_of_draws$pro_dev, 
+                           value.name = 'pro_dev') %>% 
+  mutate(Year_Class = yr.seq[Var3],
+         Age_Month = round(as.numeric(
+           grep('[0-9]', names(y.df), value=TRUE)[Var2]),2),
+         winter = Age_Month %in% c(1.83, 1.92, 2, 2.08, 2.17, 2.25,
+                                   2.83, 2.92, 3, 3.08, 3.17, 3.25))
+
+ggplot(pro_devs) + 
+  geom_boxplot(aes(x = factor(Age_Month), y = pro_dev, col = winter)) +
   geom_hline(yintercept = 0, col = 'red') +
   scale_x_discrete(labels = c(1, rep('', 11), 2, rep('', 11), 3, rep('', 5))) +
   labs(x = 'Age (years)', y = 'Process error')
 
-ggplot(pro.dev) + 
-  geom_boxplot(aes(x = factor(Year_Class), y = pro.dev, col = Year_Class)) +
+ggplot(pro_devs) + 
+  geom_boxplot(aes(x = factor(Year_Class), y = pro_dev)) +
   geom_hline(yintercept = 0, col = 'red') +
   scale_x_discrete(labels = c(rep('', 4), 1990, rep('', 9), 2000, rep('', 9), 2010, rep('', 7))) +
   labs(x = 'Cohort', y = 'Process error') +
@@ -332,8 +279,6 @@ ggplot(pro.dev) +
 
 ## Next steps:
 
-1.  Does anyone have any thoughts on why faster growth during the first year and slower growth especially during the second winter and age 3 are getting shunted into random effects? Is it important to fix? I'm not weighting anything by sample size. Maybe age 3 mean lengths are unreliable and need to be down-weighted? I recall that I tried doing that and the results were wonky for some reason. Maybe the data are just not informative enough for such a data-hungry state-space model?
-
-2.  Compare with condition index (have data), look at possible oceanographic and density-related correlates with growth and condition?
+1.  Model selection?
 
 <!-- Martell et al. 2000 report annual M of 0.96 $\text{yr}^{-1}$, which is used in VPA.  -->
