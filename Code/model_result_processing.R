@@ -34,7 +34,7 @@ calc_fitted_vals <- function(list_of_draws, y.mat, complete.data, y.df) {
 }
 
 # run model ---------------------------------------------------------------
-for(ii in 1) {
+for(ii in 1:3) {
   mod <- stan('Code/growth_model.stan', 
               data = list(N = N, M = M, y = y.vec - mean(y.vec),  
                           cohorts = cohorts, 
