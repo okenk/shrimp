@@ -161,7 +161,7 @@ ocean_glorys <- read_csv(here('data', 'data_glorys.csv')) %>%
 covar.all <- tibble(year = y.df$Year_Class, cohorts) %>%
   group_by(year) %>%
   summarize(cohort = first(cohorts)) %>%
-  left_join(dat_combo) %>%
+  left_join(ocean_combo) %>%
   arrange(cohort) %>%
   select(-year, -cohort, -maxBLT_brood) %>%
   mutate(across(everything(), ~ (.x - mean(.x))/sd(.x)))
