@@ -150,5 +150,21 @@ sex_ratio_mat[-nrow(sex_ratio_mat), 13:24] <- sex_ratios$prop_2f[-1]
 sex_ratio_mat[-nrow(sex_ratio_mat)+0:1, 25:ncol(sex_ratio_mat)] <- sex_ratios$prop_2f[-(1:2)]
 # Also checked that numbers get repeated row-wise and are unique column-wise, which is correct.
 
+ocean_combo <- read_csv(here('data', 'data_roms_glorys.csv')) %>%
+  select(-1)
+
+ocean_roms <- read_csv(here('data', 'data_roms.csv')) %>%
+  select(-1)
+ocean_glorys <- read_csv(here('data', 'data_glorys.csv')) %>%
+  select(-1)
+
+covar.all <- tibble(year = y.df$Year_Class, cohorts) %>%
+  group_by(year) %>%
+  summarize(cohort = first(cohorts)) %>%
+  left_join(dat_combo) %>%
+  arrange(cohort) %>%
+  select(-year, -cohort, -maxBLT_brood) %>%
+  mutate(across(everything(), ~ (.x - mean(.x))/sd(.x)))
+
 mcmc_list <- list(n_mcmc = 5000)
 #mcmc_list <- list(n_mcmc =300, n_burn = 200, n_thin = 1)

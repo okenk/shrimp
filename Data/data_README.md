@@ -54,3 +54,8 @@ Files in the Data folder:
     -   This is a lot of variables for this few years? Do we really want monthly for the whole summer?
 
 -   data_per_state_area: folder of csv files, one file for each oceanographic variable with columns for each state area
+
+-   data_glorys.csv, data_roms.csv, data_roms_glorys.csv: received from R. Bani 4/25/22. Oceanographic variables. 
+    -   ROMS = 1980-2010, GLORYS = 1993-2019, ROMS + GLORYS = 1980-2019 BUT no corrections done to connect the two models. GLORYS used 1993 onward.
+    -   BLT: bottom layer temp?, TLT: top layer temp?, CST: cross-shelf transport?, LST: long-shelf transport?
+    -   precond: months, brood: months, spwn: months, lrvl_phase: months.

@@ -14,6 +14,8 @@ data {
   int<lower=0> col_indx_pos[n_pos];
   int<lower=0> row_indx_pos[n_pos];
   vector[n_pos] y; // data
+  int<lower=0> n_covar;
+  matrix[S, n_covar] covar_dat;
   int<lower=0, upper=1> est_pro_dev;
   int<lower=0, upper=1> est_area_offset;
   int<lower=0, upper=1> calc_ppd;
@@ -21,7 +23,6 @@ data {
 
 transformed data {
   vector[N] seasons;
-  // This is a conditional statement. x ? y : z means if x then y else z
   for(t in 1:N) {
     seasons[t] = sin(pi()*fmod(t+1,12)/6);
     // fmod = remainder function
@@ -37,6 +38,7 @@ parameters {
   real<lower=0> sigma_area;
   real U;
   real U_season;
+  vector[n_covar] covar_par; // eventually this should be an array so that it can have different values across areas
   real<lower=0, upper=1> B;
   real<lower=0> sigma_process;
   real<lower=0> sigma_obs;
@@ -48,6 +50,9 @@ transformed parameters {
     x[1,m] = x0_mean + x0[big_area[m], cohorts[m]]; // initial state, vague prior below
     if(est_area_offset == 1) {
       x[1,m] += area_offset[area[m]]; 
+    }
+    if(n_covar > 0) {
+      x[1,m] += covar_dat[cohorts[m]] * covar_par;
     }
     for(t in 2:N) {
       x[t,m] = B * x[t-1,m] + U + U_season * seasons[t-1];
@@ -92,22 +97,18 @@ model {
 generated quantities {
   vector[n_pos] pred_vec;
   vector[n_pos] y_pp;
+  vector[n_pos] log_lik;
   
   for(i in 1:n_pos) {
     pred_vec[i] = x[col_indx_pos[i], row_indx_pos[i]];
+    log_lik[i] = normal_lpdf(y[i] | pred_vec[i], sigma_obs);
   }
   
   // posterior predictive checks. 
   if(calc_ppd == 1) {
     for(i in 1:n_pos) {
       y_pp[i]  = normal_rng(pred_vec[i], sigma_obs);// + sigma_samp/sqrt(samp_size[i]));
+    }
   }
-}
   
-  // vector[n_pos] log_lik;
-  // // regresssion example in loo() package
-  // for (n in 1:n_pos) {
-    //   log_lik[n] = normal_lpdf(y[n] | pred[col_indx_pos[n], row_indx_pos[n]],
-                                  //                            sigma_obs[obsVariances[row_indx_pos[n]]]/sqrt(samp_size[n]));
-    // }
-  }
+}
