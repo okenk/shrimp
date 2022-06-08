@@ -1,4 +1,5 @@
 library(furrr)
+library(loo)
 
 fit_growth_mod <- function(input_data, covar, covar_name, mcmc_control = list()) {
   input_data$covar_dat <- as.matrix(covar, ncol = 1)
@@ -16,9 +17,9 @@ fit_growth_mod <- function(input_data, covar, covar_name, mcmc_control = list())
                        'log_lik'
                        #                       'y_pp'
               ), 
-              iter = 100, chains = 4, cores = 4,
+              iter = 4000, chains = 4, cores = 4,
               seed = 2309853209,
-              algorithm = 'Fixed_param',
+              # algorithm = 'Fixed_param',
               #iter=100, chains=1,
               #thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
               control = list(adapt_delta = 0.9, max_treedepth = 15))
@@ -30,6 +31,7 @@ fit_growth_mod <- function(input_data, covar, covar_name, mcmc_control = list())
   return(loo_est)
 }
 
+ii <- 1
 input_data <- list(N = N, M = M, y = y.vec - mean(y.vec),  
      cohorts = cohorts, 
      S = max(cohorts), 
@@ -44,6 +46,26 @@ input_data <- list(N = N, M = M, y = y.vec - mean(y.vec),
 
 library(furrr)
 
-plan(multisession(workers = 2))
-xx <- select(covar.all, 1:2) %>%
+plan(list(tweak(multisession, workers = 6), tweak(multisession, workers = 4)))
+xx <- covar.all %>%
   future_imap(~ fit_growth_mod(input_data = input_data, covar = .x, covar_name = .y))
+
+loo_compare(xx)
+
+library(furrr)
+library(loo)
+plan(list(tweak(multisession, workers = 6), tweak(multisession, workers = 4)))
+xx <- future_map(names(covar.all), function(.x) {
+  load(here(glue::glue('Code/covars/model_fit_{.x}.RData')))
+  log_lik <- extract_log_lik(mod, merge_chains = FALSE)
+  r_eff <- relative_eff(exp(log_lik), cores = 4) 
+  loo_est <- loo(log_lik, r_eff = r_eff, cores = 4)
+  return(loo_est)
+})
+
+load(here('Code/model_fit_base.RData'))
+log_lik <- extract_log_lik(mod, merge_chains = FALSE)
+r_eff <- relative_eff(exp(log_lik), cores = 4) 
+xx$base <- loo(log_lik, r_eff = r_eff, cores = 4)
+
+names(xx)[1:6] <- names(covar.all)
