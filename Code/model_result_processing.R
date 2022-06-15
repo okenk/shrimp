@@ -34,7 +34,7 @@ calc_fitted_vals <- function(list_of_draws, y.mat, complete.data, y.df) {
 }
 
 # run model ---------------------------------------------------------------
-for(ii in 1:3) {
+for(ii in 1) {
   mod <- stan('Code/growth_model.stan', 
               data = list(N = N, M = M, y = y.vec - mean(y.vec),  
                           cohorts = cohorts, 
@@ -43,10 +43,12 @@ for(ii in 1:3) {
                           n_big_area = c(1, rep(max(big.areas), 2))[ii], 
                           big_area = cbind(1, big.areas, big.areas)[,ii],
                           n_pos = n_pos, col_indx_pos = complete.data[,2], 
+                          n_covar = 0, #ncol(covar),
+                          covar_dat = matrix(0, nrow = 32, ncol=0),#covar,
                           row_indx_pos = complete.data[,1], 
                           est_pro_dev = 1,
                           est_area_offset = c(1,0,1)[ii],
-                          calc_ppd = 1, samp_size = n.vec), 
+                          calc_ppd = 0, samp_size = n.vec), 
               pars = c('x0_mean', 'sigma_x0', 'x0', 
                        list('area_offset', NULL, 'area_offset')[[ii]],
                        'sigma_area', 
@@ -54,14 +56,16 @@ for(ii in 1:3) {
                        'sigma_process', 
                        'sigma_obs', 
                        'pred_vec', 
-                       'pro_dev', 
-                       'y_pp'), 
+                       'pro_dev', 'covar_par',
+                       'log_lik'
+#                       'y_pp'
+                       ), 
               iter = 4000, chains = 4, cores = 4,
               #iter=100, chains=1,
               #thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
-              control = list(adapt_delta = 0.9, max_treedepth = 10))
+              control = list(adapt_delta = 0.9, max_treedepth = 15))
   save(mod, file = here(paste0('Code/model_fit', 
-                               c('', '_big_area_no_offset', '_big_area')[ii],
+                               c('_base', '_big_area_no_offset', '_big_area')[ii],
                                '.RData'
                                )
                         )
@@ -80,6 +84,10 @@ png(filename = 'Figures/pairs.png', width = 10, height = 10, units = 'in', res =
 pairs(mod.simple, pars=grep('x0', names(mod.simple@sim$samples[[1]]), value = TRUE))
 dev.off()
 
+log_lik <- extract_log_lik(mod, merge_chains = FALSE)
+r_eff <- relative_eff(exp(log_lik), cores = 4) 
+loo_1 <- loo(log_lik, r_eff = r_eff)
+
 # Time for fitting simple model:
 # warmup  sample
 # chain:1 1808.70 1133.11
@@ -96,8 +104,8 @@ list_of_draws <- rstan::extract(mod)
 
 ## initial size deviations
 
-x0.dev <- list_of_draws$x0 %>%
-  apply(2, median) %>% 
+x0.dev <- list_of_draws$x0 %>% 
+  apply(3, median) %>% 
   tibble() %>%
   rename_with(~ 'x0') %>%
   mutate(x0 = x0 + mean(y.mat, na.rm = TRUE)) %>%
