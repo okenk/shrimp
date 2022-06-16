@@ -1,5 +1,7 @@
 library(readxl)
-library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(stringr)
 library(rstan)
 library(shinystan)
 library(here)
@@ -19,7 +21,7 @@ age_comp <- here('Data/shrimp age comp and count.xlsx') %>%
          N2 = ceiling(N*Pct_Comp))
 
 ssh <- here('Data/CC_SSH.csv') %>%
-  read_csv() %>%
+  readr::read_csv() %>%
   filter(Month == 4, Year >= 1986) %>% # April SSH, length data starts in 1989 
   mutate(std_MSL = (Monthly_MSL - mean(Monthly_MSL, na.rm = TRUE))/sd(Monthly_MSL, na.rm = TRUE)) %>%
   select(Year, std_MSL) 
@@ -29,16 +31,16 @@ standardize_vec <- function(vec) {
 }
 
 biomass <- here('Data/OR-VPE.XLSX') %>%
-  read_excel() %>%
+  read_excel() %>% 
   mutate('Year' = `Spawn Year`, # this naming scheme makes no sense to me, but I *think* spawn year is the year the cohort is age 1.
          Std_Log_Bio = standardize_vec(`OR log VPE`),
          Std_Bio = standardize_vec(`OR VPE calculated`),
          Std_R = standardize_vec(`OR Age 1`)) %>%
   select(Year, Std_Log_Bio, Std_Bio, Std_R, `North Log VPE`, `South Log VPE`) %>%
-  filter(!is.na(Std_Log_Bio))
+  filter(!is.na(Std_R))
 
 lengths <- here('Data/Compiled_Lengths.csv') %>%
-  read_csv(col_types = 'cdcddddd') %>%
+  readr::read_csv(col_types = 'cdcddddd') %>%
   mutate(Year_Class = Year - Age, # Year class is year at age 0, i.e., the year where they start settling in fall
        Age_Month = Age + Month_Num/12) %>%
   left_join(age_comp[,c('Year', 'Area', 'Month', 'N2', 'Age')]) %>%
@@ -127,11 +129,11 @@ areas <- as.numeric(as.factor(y.df$Area))
 big.areas <- y.df$Big_Area
 
 area.locations <- here('Data/area_locations.csv') %>%
-  read_csv() %>%
+  readr::read_csv() %>%
   arrange(Area)
 
 sex_ratios <-  here('Data/sex_ratios.csv') %>%
-  read_csv() %>%
+  readr::read_csv() %>%
   select(year:`age 2 males`) %>%
   filter(year >= 1986, year <= 2017) %>%
   group_by(year) %>%
@@ -150,19 +152,20 @@ sex_ratio_mat[-nrow(sex_ratio_mat), 13:24] <- sex_ratios$prop_2f[-1]
 sex_ratio_mat[-nrow(sex_ratio_mat)+0:1, 25:ncol(sex_ratio_mat)] <- sex_ratios$prop_2f[-(1:2)]
 # Also checked that numbers get repeated row-wise and are unique column-wise, which is correct.
 
-ocean_combo <- read_csv(here('data', 'data_roms_glorys.csv')) %>%
+ocean_combo <- readr::read_csv(here('data', 'data_roms_glorys.csv')) %>%
   select(-1)
 
-ocean_roms <- read_csv(here('data', 'data_roms.csv')) %>%
+ocean_roms <- readr::read_csv(here('data', 'data_roms.csv')) %>%
   select(-1)
-ocean_glorys <- read_csv(here('data', 'data_glorys.csv')) %>%
+ocean_glorys <- readr::read_csv(here('data', 'data_glorys.csv')) %>%
   select(-1)
 
 covar.all <- tibble(year = y.df$Year_Class, cohorts) %>%
   group_by(year) %>%
   summarize(cohort = first(cohorts)) %>%
   left_join(ocean_combo) %>%
-  arrange(cohort) %>%
+  left_join(select(biomass, year=Year, Std_R)) %>%
+  arrange(cohort) %>% 
   select(-year, -cohort, -maxBLT_brood) %>%
   mutate(across(everything(), ~ (.x - mean(.x))/sd(.x)))
 

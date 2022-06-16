@@ -46,7 +46,7 @@ input_data <- list(N = N, M = M, y = y.vec - mean(y.vec),
 
 library(furrr)
 
-plan(list(tweak(multisession, workers = 6), tweak(multisession, workers = 4)))
+plan(list(tweak(multisession, workers = 7), tweak(multisession, workers = 4)))
 xx <- covar.all %>%
   future_imap(~ fit_growth_mod(input_data = input_data, covar = .x, covar_name = .y))
 
@@ -54,7 +54,7 @@ loo_compare(xx)
 
 library(furrr)
 library(loo)
-plan(list(tweak(multisession, workers = 6), tweak(multisession, workers = 4)))
+plan(list(tweak(multisession, workers = 7), tweak(multisession, workers = 4)))
 xx <- future_map(names(covar.all), function(.x) {
   load(here(glue::glue('Code/covars/model_fit_{.x}.RData')))
   log_lik <- extract_log_lik(mod, merge_chains = FALSE)
@@ -68,4 +68,4 @@ log_lik <- extract_log_lik(mod, merge_chains = FALSE)
 r_eff <- relative_eff(exp(log_lik), cores = 4) 
 xx$base <- loo(log_lik, r_eff = r_eff, cores = 4)
 
-names(xx)[1:6] <- names(covar.all)
+names(xx)[1:7] <- names(covar.all)
