@@ -44,16 +44,14 @@ input_data <- list(N = N, M = M, y = y.vec - mean(y.vec),
      est_area_offset = c(1,0,1)[ii],
      calc_ppd = 0, samp_size = n.vec)
 
-library(furrr)
-
+## This runs the MCMC and calculates LOOIC
 plan(list(tweak(multisession, workers = 7), tweak(multisession, workers = 4)))
 xx <- covar.all %>%
   future_imap(~ fit_growth_mod(input_data = input_data, covar = .x, covar_name = .y))
 
 loo_compare(xx)
 
-library(furrr)
-library(loo)
+## This calculates LOOIC based on pre-run MCMC chains.
 plan(list(tweak(multisession, workers = 7), tweak(multisession, workers = 4)))
 xx <- future_map(names(covar.all), function(.x) {
   load(here(glue::glue('Code/covars/model_fit_{.x}.RData')))
@@ -69,3 +67,18 @@ r_eff <- relative_eff(exp(log_lik), cores = 4)
 xx$base <- loo(log_lik, r_eff = r_eff, cores = 4)
 
 names(xx)[1:7] <- names(covar.all)
+
+
+
+### Recruitment
+library(brms)
+
+### want to use raw recruitment and then log transform rather than standardized form.
+### This is a task for next week...
+### Then: check model fit. potential for AR term?
+plan(list(tweak(multisession, workers = 6), tweak(multisession, workers = 4)))
+xx <- future_map(covar.all[,1:6],
+                   ~ brm(formula = Std_R ~ ., family = gaussian(link = 'log'), data = covar.all, 
+                         chains = 4, iter = 4000))
+
+test <- brm(formula = )
