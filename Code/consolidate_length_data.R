@@ -9,11 +9,11 @@ for(year in yrs) {
   filename <- paste0('Data/shrimp_length_files/', year, 'mltable.xls')
   length_by_yr[[which(yrs == year)]] <- read_excel(filename, range = 'A5:H71', na = c('-', '--'), 
                                                    col_types = c('text', rep('numeric', 7))) %>%
-    filter(!is.na(X__1)) %>% # remove blank rows
-    mutate(State_Area = rep(gsub('MEAN LENGTHS - area ', '', grep('MEAN', X__1, value = TRUE)), each = 5)) %>%
-    slice(-grep('MEAN', X__1)) %>%  # remove more blank rows
-    mutate(Age = as.numeric(gsub('\\+', '', gsub("'S", '', X__1)))) %>%
-    select(-X__1) %>% # this info has been put into Age column
+    filter(!is.na(`...1`)) %>% # remove blank rows
+    mutate(State_Area = rep(gsub('MEAN LENGTHS - area ', '', grep('MEAN', `...1`, value = TRUE)), each = 5)) %>%
+    slice(-grep('MEAN', `...1`)) %>%  # remove more blank rows
+    mutate(Age = as.numeric(gsub('\\+', '', gsub("'S", '', `...1`)))) %>%
+    select(-`...1`) %>% # this info has been put into Age column
     gather(key = 'Month', value = 'Avg_Len', -State_Area, -Age) %>%
     mutate(Year = year,
            Month = str_sub(str_to_upper(Month), end = 3), # month formatting varied, this ensures consistency
