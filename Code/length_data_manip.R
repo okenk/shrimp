@@ -36,7 +36,7 @@ biomass <- here('Data/OR-VPE.XLSX') %>%
          Std_Log_Bio = standardize_vec(`OR log VPE`),
          Std_Bio = standardize_vec(`OR VPE calculated`),
          Std_R = standardize_vec(`OR Age 1`)) %>%
-  select(Year, Std_Log_Bio, Std_Bio, Std_R, `North Log VPE`, `South Log VPE`) %>%
+  select(Year, Std_Log_Bio, Std_Bio, Std_R, `North Log VPE`, `South Log VPE`, `OR Age 1`) %>%
   filter(!is.na(Std_R))
 
 lengths <- here('Data/Compiled_Lengths.csv') %>%
@@ -164,10 +164,11 @@ covar.all <- tibble(year = y.df$Year_Class, cohorts) %>%
   group_by(year) %>%
   summarize(cohort = first(cohorts)) %>%
   left_join(ocean_combo) %>%
-  left_join(select(biomass, year=Year, Std_R)) %>%
+  left_join(select(biomass, year=Year, Std_R, `OR Age 1`)) %>% 
   arrange(cohort) %>% 
   select(-year, -cohort, -maxBLT_brood) %>%
-  mutate(across(everything(), ~ (.x - mean(.x))/sd(.x)))
+  mutate(across(-`OR Age 1`, ~ (.x - mean(.x))/sd(.x))) %>%
+  rename(recruits = `OR Age 1`)
 
 mcmc_list <- list(n_mcmc = 5000)
 #mcmc_list <- list(n_mcmc =300, n_burn = 200, n_thin = 1)

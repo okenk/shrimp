@@ -72,13 +72,38 @@ names(xx)[1:7] <- names(covar.all)
 
 ### Recruitment
 library(brms)
-
+library(future)
 ### want to use raw recruitment and then log transform rather than standardized form.
 ### This is a task for next week...
 ### Then: check model fit. potential for AR term?
-plan(list(tweak(multisession, workers = 6), tweak(multisession, workers = 4)))
-xx <- future_map(covar.all[,1:6],
-                   ~ brm(formula = Std_R ~ ., family = gaussian(link = 'log'), data = covar.all, 
-                         chains = 4, iter = 4000))
+#plan(list(tweak(multisession, workers = 6), tweak(multisession, workers = 4)))
+
+log_transform <- brm(formula = log(recruits) ~ meanBLT_precond, family = gaussian, data = covar.all)
+untransformed <- brm(formula = brmsformula(recruits ~ meanBLT_precond),
+                     family = gaussian(link = 'log'), data = covar.all, )
+pp_check(log_transform, type = 'intervals') # Very overdispersed. Is there a better error distribution to use?
+
+
+plan(multisession)
+
+xx <- select(covar.all, -Std_R) %>%
+  pivot_longer(cols = -recruits, names_to = 'driver', values_to = 'driver_value') %>%
+  group_by(driver) %>%
+  nest() %>%
+  mutate(model = purrr::map(data, function(df)
+    brm(formula = log(recruits) ~ driver_value, family = gaussian, data = df, 
+        chains = 4, iter = 1000, cores = 4, seed = 23598709))) %>%
+  mutate(looic = purrr::map(model, loo))
+
+# There is probably a better way to do this:
+looic.list <- xx$looic
+names(looic.list) <- xx$driver
+loo_compare(looic.list)
+
+xx %>%
+  mutate(tidy_model = purrr::map(model, broom.mixed::tidy)) %>%
+  select(-data, -model) %>%
+  unnest()
 
 test <- brm(formula = )
+

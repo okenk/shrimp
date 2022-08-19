@@ -1,0 +1,122 @@
+---
+title: "YPR analysis"
+output: pdf_document
+date: '2022-07-26'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include = FALSE, warning=FALSE, message=FALSE}
+library(here)
+source(here('Code/length_data_manip.R'))
+source(here('Code/YPR_modeling.R'))
+```
+
+For this analysis, I used my base length model (no environmental covariates). I fit a length-weight regression (`lm(log(weight) ~ log(length)`) to some data Scott had sent me to get an equation to convert from length (take from median posterior distributions) and numbers to biomass. The equation to get weight in grams based on length in millimeters is:
+
+`r glue::glue("$$W = {a}L^{{{b}}}$$", a = round(exp(coef(weight.length.mod)[1]),4), b = round(coef(weight.length.mod)[2],2))`
+
+I used Gallagher et al. (2004) for several other parameters:
+
+-   M = 0.09 1/mo in the summer and 0.06 1/mo for the winter. Predation by hake is thought to be higher during the summer months.
+
+-   For the revenue per recruit model, I used Ex-vessel price = 0.6098 - 0.0022 \* count per pound. I do have shrimp fish tickets, but I don't think that is enough information in them alone to redo this regression because the fish tickets do not contain information on shrimp size. (Dan, maybe I am wrong/you have ideas here?)
+
+Note that because the model is monthly, but both natural and fishing mortality change seasonally, I did not include a plus group. This means I assumed any shrimp that survive three fishing seasons will never get caught. There are not generally a lot of individuals left in the model by the end of the third fishing season, but if there is a good way to have a plus group I am open.
+
+The following are yield per recruit and revenue per recruit curves for a fishery with various opening dates. For the yield per recruit analysis, you basically find that the shrimp are always worth more out of the water than in, and the YPR curve increases monotonically with fishing mortality, i.e., just fish the snot of them as fast as you can as soon as you can. I included the five opening dates I saw discussed in the newsletter.
+
+```{r, echo=FALSE, message=FALSE}
+n_FF <- 50
+FF_seq <- seq(0, 0.3, length.out = n_FF) 
+ypr.list$max_cpp <- NA 
+
+xx <- expand.grid(FF_seq = FF_seq, opening = 1:5) %>% 
+  purrr::pmap_dfr(function(FF_seq, opening) 
+    get_ypr(FF = FF_seq, opening = opening, metric = 'yield', setup.list = ypr.list)) %>%
+  rename(rpr = value)
+
+
+
+xx %>%
+  mutate(opening_chr = paste(month.abb[ceiling(opening/2) + 3], 
+                             c(15,1)[opening %% 2 + 1])) %>%
+  group_by(opening_chr, FF) %>%
+  summarize(low = quantile(rpr, 0.025), mid = median(rpr), 
+            high = quantile(rpr, 0.975), opening = first(opening)) %>% 
+  ggplot() +
+#  geom_ribbon(aes(x = FF, ymin = low, ymax = high, group = opening), alpha = 0.2) +
+  geom_line(aes(x = FF, y = mid, col = opening_chr, group = opening_chr)) +
+  labs(x = 'F (1/mo)', y = 'YPR') +
+  geom_vline(xintercept = 0.03) +
+  geom_vline(xintercept = 0.2) +
+  NULL
+
+```
+
+For the revenue per recruit analysis the curve is more interesting and does max out at some intermediate fishing mortality. Backing out fishing mortality rates from the data I had was challenging, but I found a time series of estimated fishing mortality rates in Hannah and Jones (2014). It reports the annual fishing mortality rate has ranged from 0.2 to 1.4 yr$^{-1}$. Fishing occurs for seven months (April - October) out of the year. If we assume effort is distributed evenly across months (it isn't), the monthly fishing mortality rate has ranged from 0.2/7 = 0.029 to 1.4/7 = 0.2 mo$^{-1}$. I have added vertical lines for the minimum and maximum monthly mortality rates.
+
+There are two revenue per recruit plots. One with just Dan's regression equation (price = 1.4309 - 0.00387 \* count per pound) and one with Dan's regression equation plus anything greater than 160 CPP (the maximum in a publication I found) results in zero revenue.
+
+```{r, echo=FALSE, message=FALSE}
+n_FF <- 50
+FF_seq <- seq(0, 0.3, length.out = n_FF) 
+ypr.list$max_cpp <- NA
+
+xx <- expand.grid(FF_seq = FF_seq, opening = 1:5) %>% 
+  purrr::pmap_dfr(function(FF_seq, opening) 
+    get_ypr(FF = FF_seq, opening = opening, metric = 'revenue', setup.list = ypr.list)) %>%
+  rename(rpr = value)
+
+
+
+xx %>%
+  mutate(opening_chr = paste(month.abb[ceiling(opening/2) + 3], 
+                             c(15,1)[opening %% 2 + 1])) %>%
+  group_by(opening_chr, FF) %>%
+  summarize(low = quantile(rpr, 0.025), mid = median(rpr), 
+            high = quantile(rpr, 0.975), opening = first(opening)) %>% 
+  filter(opening <= 5) %>%
+  ggplot() +
+#  geom_ribbon(aes(x = FF, ymin = low, ymax = high, group = opening), alpha = 0.2) +
+  geom_line(aes(x = FF, y = mid, col = opening, group = opening_chr)) +
+  labs(x = 'F (1/mo)', y = 'RPR') +
+  geom_vline(xintercept = 0.03) +
+  geom_vline(xintercept = 0.2) +
+  ggtitle('No max CPP') +
+  NULL
+  
+  ypr.list$max_cpp <- 160
+
+xx <- expand.grid(FF_seq = FF_seq, opening = 1:5) %>% 
+  purrr::pmap_dfr(function(FF_seq, opening) 
+    get_ypr(FF = FF_seq, opening = opening, metric = 'revenue', setup.list = ypr.list)) %>%
+  rename(rpr = value)
+
+
+
+xx %>%
+  mutate(opening_chr = paste(month.abb[ceiling(opening/2) + 3], 
+                             c(15,1)[opening %% 2 + 1])) %>%
+  group_by(opening_chr, FF) %>%
+  summarize(low = quantile(rpr, 0.025), mid = median(rpr), 
+            high = quantile(rpr, 0.975), opening = first(opening)) %>% 
+  filter(opening <= 5) %>%
+  ggplot() +
+#  geom_ribbon(aes(x = FF, ymin = low, ymax = high, group = opening), alpha = 0.2) +
+  geom_line(aes(x = FF, y = mid, col = opening, group = opening_chr)) +
+  labs(x = 'F (1/mo)', y = 'RPR') +
+  geom_vline(xintercept = 0.03) +
+  geom_vline(xintercept = 0.2) +
+  ggtitle('Max CPP = 160') +
+  NULL
+
+
+
+```
+
+## Next Steps
+
+-   Look at how YPR and RPR curves change with different recruitment sizes
