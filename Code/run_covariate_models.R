@@ -1,22 +1,27 @@
 library(furrr)
+library(rstan)
 library(loo)
+library(here)
+
+
+rstan_options(auto_write = TRUE)
 
 fit_growth_mod <- function(input_data, covar, covar_name, mcmc_control = list()) {
-  input_data$covar_dat <- as.matrix(covar, ncol = 1)
-  input_data$n_covar <- 1
-  mod <- stan('Code/growth_model.stan', 
-              data = input_data, 
-              pars = c('x0_mean', 'sigma_x0', 'x0', 
+  input_data$covar_dat <- as.matrix(covar, ncol = length(covar_name))
+  input_data$n_covar <- length(covar_name)
+  mod <- stan('Code/growth_model.stan',
+              data = input_data,
+              pars = c('x0_mean', 'sigma_x0', 'x0',
                        list('area_offset', NULL, 'area_offset')[[ii]],
-                       'sigma_area', 
-                       'U', 'B', 'U_season', 
-                       'sigma_process', 
-                       'sigma_obs', 
-                       'pred_vec', 
+                       'sigma_area',
+                       'U', 'B', 'U_season',
+                       'sigma_process',
+                       'sigma_obs',
+                       'pred_vec',
                        'pro_dev', 'covar_par',
                        'log_lik'
                        #                       'y_pp'
-              ), 
+              ),
               iter = 4000, chains = 4, cores = 4,
               seed = 2309853209,
               # algorithm = 'Fixed_param',
@@ -24,9 +29,9 @@ fit_growth_mod <- function(input_data, covar, covar_name, mcmc_control = list())
               #thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
               control = list(adapt_delta = 0.9, max_treedepth = 15))
   save(mod, file = here(glue::glue('Code/covars/model_fit_{covar_name}.RData')))
-  
+
   log_lik <- extract_log_lik(mod, merge_chains = FALSE)
-  r_eff <- relative_eff(exp(log_lik), cores = 4) 
+  r_eff <- relative_eff(exp(log_lik), cores = 4)
   loo_est <- loo(log_lik, r_eff = r_eff, cores = 4)
   return(loo_est)
 }
@@ -45,9 +50,14 @@ input_data <- list(N = N, M = M, y = y.vec - mean(y.vec),
      calc_ppd = 0, samp_size = n.vec)
 
 ## This runs the MCMC and calculates LOOIC
-plan(list(tweak(multisession, workers = 7), tweak(multisession, workers = 4)))
-xx <- covar.all %>%
-  future_imap(~ fit_growth_mod(input_data = input_data, covar = .x, covar_name = .y))
+vars_to_use <- c(as.list(names(covar.all)[1:3]),
+                 list(c('cuti_all_lat', 'cuti_all_lat_sq')),
+                 list(c('beuti_all_lat', 'beuti_all_lat_sq')))
+plan(list(tweak(multisession, workers = 2), tweak(multisession, workers = 4)))
+xx <- vars_to_use %>%
+  future_map(\(.x) fit_growth_mod(input_data = input_data,
+                                  covar = select(covar.all, tidyr::all_of(.x)),
+                                  covar_name = tail(.x, 1)))
 
 loo_compare(xx)
 
@@ -106,4 +116,3 @@ xx %>%
   unnest()
 
 test <- brm(formula = )
-

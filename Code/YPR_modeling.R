@@ -70,11 +70,11 @@ for(mo in 1:32) {
   pred_len_base[,mo+1] <- pred_len_base[,mo] * list_of_draws$B + list_of_draws$U
 }
 
-pred_wt <- exp(coef(weight.length.mod)[1]) * (pred_len + mean(y.vec)) ^
-  coef(weight.length.mod)[2]
+pred_wt <- exp(coef(weight.length.mod)[1] + 0.5 * sigma(weight.length.mod)^2) * 
+  (pred_len + mean(y.vec)) ^ coef(weight.length.mod)[2]
 
-pred_wt_base <- exp(coef(weight.length.mod)[1]) * (pred_len_base + mean(y.vec)) ^
-  coef(weight.length.mod)[2]
+pred_wt_base <- exp(coef(weight.length.mod)[1] + 0.5 * sigma(weight.length.mod)^2) * 
+  (pred_len_base + mean(y.vec)) ^ coef(weight.length.mod)[2]
 
 # (Could use brms to do the calculation to propagate error???)
 

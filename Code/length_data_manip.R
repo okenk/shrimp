@@ -8,6 +8,7 @@ library(here)
 
 # preparing data ----------------------------------------------------------
 
+# Is this even used?
 age_comp <- here('Data/shrimp age comp and count.xlsx') %>%
   read_excel() %>%
   gather(key = 'Age', value = 'Pct_Comp', `Age 0`:`Age 3`) %>%
@@ -20,15 +21,29 @@ age_comp <- here('Data/shrimp age comp and count.xlsx') %>%
          Area = as.character(Area),
          N2 = ceiling(N*Pct_Comp))
 
-ssh <- here('Data/CC_SSH.csv') %>%
-  readr::read_csv() %>%
-  filter(Month == 4, Year >= 1986) %>% # April SSH, length data starts in 1989 
-  mutate(std_MSL = (Monthly_MSL - mean(Monthly_MSL, na.rm = TRUE))/sd(Monthly_MSL, na.rm = TRUE)) %>%
-  select(Year, std_MSL) 
-
 standardize_vec <- function(vec) {
   (vec - mean(vec, na.rm = TRUE)) / sd(vec, na.rm = TRUE)
 }
+
+beuti <- readr::read_csv('data/BEUTI_monthly.csv') |> 
+  select(year, month, `42N`:`47N`) |>
+  filter(month >= 3, month <= 6) |> 
+  mutate(across(`42N`:`47N`, standardize_vec)) |>
+  rowwise() |>
+  mutate(all_lat = mean(c_across(`42N`:`47N`))) |>
+  group_by(year) |>
+  summarise(beuti_45N = mean(`45N`), 
+            beuti_all_lat = mean(all_lat))
+
+cuti <- readr::read_csv('data/CUTI_monthly.csv') |> 
+  select(year, month, `42N`:`47N`) |>
+  filter(month >= 3, month <= 6) |> 
+  mutate(across(`42N`:`47N`, standardize_vec)) |>
+  rowwise() |>
+  mutate(all_lat = mean(c_across(`42N`:`47N`))) |>
+  group_by(year) |>
+  summarise(cuti_45N = mean(`45N`), 
+            cuti_all_lat = mean(all_lat))
 
 biomass <- here('Data/OR-VPE.XLSX') %>%
   read_excel() %>% 
@@ -43,6 +58,7 @@ lengths <- here('Data/Compiled_Lengths.csv') %>%
   readr::read_csv(col_types = 'cdcddddd') %>%
   mutate(Year_Class = Year - Age, # Year class is year at age 0, i.e., the year where they start settling in fall
        Age_Month = Age + Month_Num/12) %>%
+  filter(Year_Class >= min(cuti$year)) %>%
   left_join(age_comp[,c('Year', 'Area', 'Month', 'N2', 'Age')]) %>%
   mutate(N = ifelse(is.na(N), N2, N)) %>%
   filter(N > 0, Age > 0, !is.na(N)) %>% 
@@ -51,17 +67,18 @@ lengths <- here('Data/Compiled_Lengths.csv') %>%
   # The issue is that there are a few area-year-month-ages that have an average length, but the
   # corresponding area-year-month does not have age comp data. Because I am no longer using N for the obs error,
   # I stopped filtering the NAs in sample size (N) out.
-  select(-N2) %>%
-  left_join(biomass) %>%
-  mutate(Log_Bio_Regional = ifelse(Area <= 23, `South Log VPE`, `North Log VPE`),
-         Std_Log_Bio_Regional = (Log_Bio_Regional - mean(Log_Bio_Regional, na.rm = TRUE))/sd(Log_Bio_Regional, na.rm = TRUE)) %>%
-  # the VPEs are for OR only, length data include WA and CA! Use N. index for WA and S. index for CA
-  select(-`North Log VPE`, -`South Log VPE`, -Log_Bio_Regional) %>%
-  left_join(ssh)
+  select(-N2) 
+# %>%
+#   left_join(biomass) %>%
+#   mutate(Log_Bio_Regional = ifelse(Area <= 23, `South Log VPE`, `North Log VPE`),
+#          Std_Log_Bio_Regional = (Log_Bio_Regional - mean(Log_Bio_Regional, na.rm = TRUE))/sd(Log_Bio_Regional, na.rm = TRUE)) %>%
+#   # the VPEs are for OR only, length data include WA and CA! Use N. index for WA and S. index for CA
+#   select(-`North Log VPE`, -`South Log VPE`, -Log_Bio_Regional) 
 
 # Setting up for Stan model
 y.df <- lengths %>%
-  select(-(Std_Log_Bio:std_MSL), -N) %>%
+  # select(-(Std_Log_Bio:Std_Log_Bio_Regional), -N) %>%
+  select(-N) %>%
   bind_rows(tibble(Age_Month = c(1+11/12, 2 + c(0, 1/12, 2/12, 3/12, 11/12), 3+c(0, 1/12, 2/12, 3/12)),
                    Year_Class = 2015, Area = as.character(12))) %>% # This adds columns for wintertime months
   select(-Month, -Age, -Month_Num, -Year, -sd) %>%
@@ -79,7 +96,7 @@ y.mat <- y.df %>%
 n.mat <- lengths %>%
   bind_rows(tibble(Age_Month = c(1+11/12, 2 + c(0, 1/12, 2/12, 3/12, 11/12), 3+c(0, 1/12, 2/12, 3/12)),
                    Year_Class = 2015, Area = as.character(12))) %>% # This adds columns for wintertime months
-  select(-(Age:Month_Num), -sd, -(Std_Log_Bio:std_MSL)) %>%
+  select(-(Age:Month_Num), -sd) %>% # -(Std_Log_Bio:Std_Log_Bio_Regional)) %>%
   spread(key = Age_Month, value = N) %>%
   select(-(Area:Year_Class)) %>%
   as.matrix()
@@ -99,30 +116,30 @@ to.add <- select(y.df, !(Area:Year_Class)) %>%
 year.df <- y.df
 year.df[,-(1:3)] <- sapply(y.df$Year_Class, function(x) x + to.add) %>% t()
 
-ssh.mat <- bio.mat <- year.df %>%
-  mutate_at(vars(-(Area:Year_Class)), function(.x) as.numeric(NA)) %>%
-  as.matrix 
-class(ssh.mat) <- class(bio.mat) <- 'numeric'
+# ssh.mat <- bio.mat <- year.df %>%
+#   mutate_at(vars(-(Area:Year_Class)), function(.x) as.numeric(NA)) %>%
+#   as.matrix
+# class(ssh.mat) <- class(bio.mat) <- 'numeric'
 
 # I don't think these are right. Need to reinvestigate to actually run model.
-for(yr in unique(ssh$Year)) {
-  ssh.mat[which(year.df == yr)] <- ssh$std_MSL[ssh$Year == yr]
-  if(length(biomass$Std_Log_Bio[biomass$Year == yr]) == 0) {
-    bio.mat[which(year.df == yr)] <- NA
-    print(yr)
-  } else {
-    bio.mat[which(year.df == yr)] <- biomass$Std_Log_Bio[biomass$Year == yr]
-  }
-}
+# for(yr in unique(ssh$Year)) {
+#   ssh.mat[which(year.df == yr)] <- ssh$std_MSL[ssh$Year == yr]
+#   if(length(biomass$Std_Log_Bio[biomass$Year == yr]) == 0) {
+#     bio.mat[which(year.df == yr)] <- NA
+#     print(yr)
+#   } else {
+#     bio.mat[which(year.df == yr)] <- biomass$Std_Log_Bio[biomass$Year == yr]
+#   }
+# }
 
-ssh.mat <- ssh.mat[,-(1:2)]
-bio.mat <- bio.mat[,-(1:2)]
+# ssh.mat <- ssh.mat[,-(1:2)]
+# bio.mat <- bio.mat[,-(1:2)]
 
 complete.data <- which(!is.na(y.mat), arr.ind = TRUE)
 n_pos <- nrow(complete.data)
 y.vec <- y.mat[which(!is.na(y.mat))]
 n.vec <- n.mat[which(!is.na(y.mat))]
-# area.vec <- area.mat[which(!is.na(y.mat))]
+area.vec <- area.mat[which(!is.na(y.mat))]
 
 cohorts <- as.numeric(as.factor(y.df$Year_Class))
 areas <- as.numeric(as.factor(y.df$Area))
@@ -132,43 +149,26 @@ area.locations <- here('Data/area_locations.csv') %>%
   readr::read_csv() %>%
   arrange(Area)
 
-sex_ratios <-  here('Data/sex_ratios.csv') %>%
-  readr::read_csv() %>%
-  select(year:`age 2 males`) %>%
-  filter(year >= 1986, year <= 2017) %>%
-  group_by(year) %>%
-  summarize(n_age1 = sum(`age 1 all`),
-            n_age1f = sum(`age1 fems+trans`),
-            n_age2 = sum(`age 2 all`),
-            n_age2f = n_age2 - sum(`age 2 males`)) %>%
-  mutate(prop_1f = n_age1f/n_age1,
-         prop_2f = n_age2f/n_age2)
+# From Ridouan. No documentation. Not using.
+# ocean_combo <- readr::read_csv(here('data', 'data_roms_glorys.csv')) %>%
+#   select(-1)
+# 
+# ocean_roms <- readr::read_csv(here('data', 'data_roms.csv')) %>%
+#   select(-1)
+# ocean_glorys <- readr::read_csv(here('data', 'data_glorys.csv')) %>%
+#   select(-1)
 
-sex_ratio_mat <- matrix(0, nrow = max(cohorts), ncol = N, dimnames = list(cohort = NULL, month = NULL))
-sex_ratio_mat[,1:12] <- sex_ratios$prop_1f
-sex_ratio_mat[-nrow(sex_ratio_mat), 13:24] <- sex_ratios$prop_2f[-1]
-# Don't fill the last row of matrix, no length data for later ages of that cohort
-# Don't include the first row of df, first cohort is 1986 (sampled in 1989), no lengths for age 2+ in 1986
-sex_ratio_mat[-nrow(sex_ratio_mat)+0:1, 25:ncol(sex_ratio_mat)] <- sex_ratios$prop_2f[-(1:2)]
-# Also checked that numbers get repeated row-wise and are unique column-wise, which is correct.
-
-ocean_combo <- readr::read_csv(here('data', 'data_roms_glorys.csv')) %>%
-  select(-1)
-
-ocean_roms <- readr::read_csv(here('data', 'data_roms.csv')) %>%
-  select(-1)
-ocean_glorys <- readr::read_csv(here('data', 'data_glorys.csv')) %>%
-  select(-1)
 
 covar.all <- tibble(year = y.df$Year_Class, cohorts) %>%
   group_by(year) %>%
   summarize(cohort = first(cohorts)) %>%
-  left_join(ocean_combo) %>%
+  left_join(cuti) %>% # need to rename columns to have index name
+  left_join(beuti) %>%
   left_join(select(biomass, year=Year, Std_R, `OR Age 1`)) %>% 
   arrange(cohort) %>% 
-  select(-year, -cohort, -maxBLT_brood) %>%
-  mutate(across(-`OR Age 1`, ~ (.x - mean(.x))/sd(.x))) %>%
-  rename(recruits = `OR Age 1`)
+  select(-year, -cohort, -`OR Age 1`, -cuti_45N, -beuti_45N) %>%
+  mutate(across(everything(), ~ standardize_vec(.x)),
+         across(-Std_R, ~ .x^2, .names = '{.col}_sq'))
 
 mcmc_list <- list(n_mcmc = 5000)
 #mcmc_list <- list(n_mcmc =300, n_burn = 200, n_thin = 1)

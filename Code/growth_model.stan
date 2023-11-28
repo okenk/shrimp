@@ -38,7 +38,7 @@ parameters {
   real<lower=0> sigma_area;
   real U;
   real U_season;
-  vector[n_covar] covar_par; // eventually this should be an array so that it can have different values across areas
+  vector[n_covar] covar_par; 
   real<lower=0, upper=1> B;
   real<lower=0> sigma_process;
   real<lower=0> sigma_obs;
@@ -52,7 +52,7 @@ transformed parameters {
       x[1,m] += area_offset[area[m]]; 
     }
     if(n_covar > 0) {
-      x[1,m] += covar_dat[cohorts[m]] * covar_par;
+      x[1,m] += covar_dat[cohorts[m]] * covar_par; // row vector * column vector = scalar
     }
     for(t in 2:N) {
       x[t,m] = B * x[t-1,m] + U + U_season * seasons[t-1];

@@ -10,3 +10,6 @@ Data/allshrimptickets1980-2019.xlsx
 *.png
 Data/allshrimp.xlsx
 Data/shrimp_tickets.csv
+# MS tmp files
+*~$*
+*.tmp

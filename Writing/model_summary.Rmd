@@ -199,11 +199,11 @@ $$
 Because earlier analyses showed similar results for this model but much longer run times, results from it are not included.
 
 ## Fitting:
+
 ```{r, echo=FALSE}
 load(here('Code', 'model_fit_big_area.RData'))
 mod.summary <- summary(mod)
 ```
-
 
 The model is fit in Stan as a multivariate autoregressive state-space model. For the linear model, the global mean is subtracted from all lengths to improve numerical stability. Each year class is essentially a different "state", and each area represents a different observation process of the same state. Four chains are run for 4000 iterations, and the final 2000 iterations of each chain are retained. The lowest effective sample size is `r round(min(mod.summary$summary[,'n_eff']), 0)` and the largest $\hat{R}$ is `r round(max(mod.summary$summary[,'Rhat']), 3)`, indicating chains have converged and produced a sufficient number of independent draws to conduct inference. It takes `r round(max(apply(get_elapsed_time(mod), 1, sum))/60, 1)` minutes to run on my laptop including warmup, with the chains running in parallel. We may be able to decrease iterations a bit more for efficiency
 
