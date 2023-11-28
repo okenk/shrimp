@@ -25,7 +25,7 @@ standardize_vec <- function(vec) {
   (vec - mean(vec, na.rm = TRUE)) / sd(vec, na.rm = TRUE)
 }
 
-beuti <- readr::read_csv('data/BEUTI_monthly.csv') |> 
+beuti <- readr::read_csv('Data/BEUTI_monthly.csv') |> 
   select(year, month, `42N`:`47N`) |>
   filter(month >= 3, month <= 6) |> 
   mutate(across(`42N`:`47N`, standardize_vec)) |>
@@ -35,7 +35,7 @@ beuti <- readr::read_csv('data/BEUTI_monthly.csv') |>
   summarise(beuti_45N = mean(`45N`), 
             beuti_all_lat = mean(all_lat))
 
-cuti <- readr::read_csv('data/CUTI_monthly.csv') |> 
+cuti <- readr::read_csv('Data/CUTI_monthly.csv') |> 
   select(year, month, `42N`:`47N`) |>
   filter(month >= 3, month <= 6) |> 
   mutate(across(`42N`:`47N`, standardize_vec)) |>
