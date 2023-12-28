@@ -25,7 +25,7 @@ standardize_vec <- function(vec) {
   (vec - mean(vec, na.rm = TRUE)) / sd(vec, na.rm = TRUE)
 }
 
-beuti <- readr::read_csv('Data/BEUTI_monthly.csv') |> 
+beuti <- readr::read_csv(here('Data/BEUTI_monthly.csv')) |> 
   select(year, month, `42N`:`47N`) |>
   filter(month >= 3, month <= 6) |> 
   mutate(across(`42N`:`47N`, standardize_vec)) |>
@@ -33,9 +33,11 @@ beuti <- readr::read_csv('Data/BEUTI_monthly.csv') |>
   mutate(all_lat = mean(c_across(`42N`:`47N`))) |>
   group_by(year) |>
   summarise(beuti_45N = mean(`45N`), 
-            beuti_all_lat = mean(all_lat))
+            beuti_all_lat = mean(all_lat)) |>
+  ungroup() |>
+  mutate(year = year + 1) # upwelling impacts growth the year before they recruit
 
-cuti <- readr::read_csv('Data/CUTI_monthly.csv') |> 
+cuti <- readr::read_csv(here('Data/CUTI_monthly.csv')) |> 
   select(year, month, `42N`:`47N`) |>
   filter(month >= 3, month <= 6) |> 
   mutate(across(`42N`:`47N`, standardize_vec)) |>
@@ -43,16 +45,19 @@ cuti <- readr::read_csv('Data/CUTI_monthly.csv') |>
   mutate(all_lat = mean(c_across(`42N`:`47N`))) |>
   group_by(year) |>
   summarise(cuti_45N = mean(`45N`), 
-            cuti_all_lat = mean(all_lat))
+            cuti_all_lat = mean(all_lat)) |>
+  ungroup() |>
+  mutate(year = year + 1) # upwelling impacts growth the year before they recruit
+
 
 biomass <- here('Data/OR-VPE.XLSX') %>%
   read_excel() %>% 
   mutate('Year' = `Spawn Year`, # this naming scheme makes no sense to me, but I *think* spawn year is the year the cohort is age 1.
          Std_Log_Bio = standardize_vec(`OR log VPE`),
          Std_Bio = standardize_vec(`OR VPE calculated`),
-         Std_R = standardize_vec(`OR Age 1`)) %>%
-  select(Year, Std_Log_Bio, Std_Bio, Std_R, `North Log VPE`, `South Log VPE`, `OR Age 1`) %>%
-  filter(!is.na(Std_R))
+         Log_R = log(`OR Age 1`)) %>%
+  select(Year, Std_Log_Bio, Std_Bio, Log_R, `North Log VPE`, `South Log VPE`, `OR Age 1`) %>%
+  filter(!is.na(Log_R))
 
 lengths <- here('Data/Compiled_Lengths.csv') %>%
   readr::read_csv(col_types = 'cdcddddd') %>%
@@ -164,11 +169,11 @@ covar.all <- tibble(year = y.df$Year_Class, cohorts) %>%
   summarize(cohort = first(cohorts)) %>%
   left_join(cuti) %>% # need to rename columns to have index name
   left_join(beuti) %>%
-  left_join(select(biomass, year=Year, Std_R, `OR Age 1`)) %>% 
+  left_join(select(biomass, year=Year, Log_R)) %>% 
   arrange(cohort) %>% 
-  select(-year, -cohort, -`OR Age 1`, -cuti_45N, -beuti_45N) %>%
+  select(-year, -cohort, -cuti_45N, -beuti_45N) %>%
   mutate(across(everything(), ~ standardize_vec(.x)),
-         across(-Std_R, ~ .x^2, .names = '{.col}_sq'))
+         across(-Log_R, ~ .x^2, .names = '{.col}_sq'))
 
 mcmc_list <- list(n_mcmc = 5000)
 #mcmc_list <- list(n_mcmc =300, n_burn = 200, n_thin = 1)

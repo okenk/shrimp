@@ -6,6 +6,7 @@ Figures/*
 Code/mcmc_run.RData
 Data/allshrimptickets1980-2019.xlsx
 *.RData
+*.Rds
 *.pdf
 *.png
 Data/allshrimp.xlsx
@@ -13,3 +14,6 @@ Data/shrimp_tickets.csv
 # MS tmp files
 *~$*
 *.tmp
+*cache*
+*supp.docx
+*figs.docx

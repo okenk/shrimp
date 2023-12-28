@@ -44,7 +44,7 @@ for(ii in 1) {
                           big_area = cbind(1, big.areas, big.areas)[,ii],
                           n_pos = n_pos, col_indx_pos = complete.data[,2], 
                           n_covar = 0, #ncol(covar),
-                          covar_dat = matrix(0, nrow = 32, ncol=0),#covar,
+                          covar_dat = matrix(0, nrow = 30, ncol=0),#covar,
                           row_indx_pos = complete.data[,1], 
                           est_pro_dev = 1,
                           est_area_offset = c(1,0,1)[ii],
@@ -64,8 +64,8 @@ for(ii in 1) {
               #iter=100, chains=1,
               #thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
               control = list(adapt_delta = 0.9, max_treedepth = 15))
-  save(mod, file = here(paste0('Code/model_fit', 
-                               c('_base', '_big_area_no_offset', '_big_area')[ii],
+  save(mod, file = here(paste0('Code/covars/', 
+                               c('base', 'big_area_no_offset', 'big_area')[ii],
                                '.RData'
                                )
                         )

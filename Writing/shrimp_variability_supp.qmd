@@ -1,0 +1,94 @@
+---
+editor: visual
+format: docx
+---
+
+```{r opts, echo = FALSE, include = FALSE, warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, dpi = 500)
+library(here)
+library(ggplot2)
+library(rstan)
+source(here('code/length_data_manip.R'))
+load(here('code/covars/base.rdata'))
+load(here('code/rpr.rdata'))
+theme_set(ggsidekick::theme_sleek())
+
+list_of_draws <- rstan::extract(mod)
+
+calc_fitted_vals <- function(list_of_draws, y.mat, complete.data, 
+                             y.df) {
+  med.pred <- list_of_draws$pred_vec %>%
+    apply(2, median)
+  pred.mat <- matrix(nrow = nrow(y.mat), ncol = ncol(y.mat), 
+                     dimnames = list(rownames(y.mat), colnames(y.mat)))
+  for(ii in 1:nrow(complete.data)) {
+    pred.mat[complete.data[ii,1], complete.data[ii,2]] <- med.pred[ii] 
+  }
+  
+  length.fits <- as_tibble(pred.mat + mean(y.mat, na.rm=TRUE)) %>%
+    bind_cols(select(y.df, Area, Year_Class)) %>%
+    gather(key = 'Age_Month', value = 'MedPredLength', -Area, -Year_Class) %>%
+    mutate(Age_Month = as.numeric(Age_Month),
+           Age = floor(Age_Month),
+           Month_Num = round(12*(Age_Month - Age))) %>% 
+    select(-Age_Month) %>%
+    right_join(lengths)
+  
+  return(length.fits)
+}
+```
+
+```{r}
+#| label: fig-model-fits
+#| fig-cap: "Posterior predicted distribution (PP Length) and observed data for base model. Each tick on the x-axis is one month; solid vertical lines separate years. Data replicates are across state areas and years."
+#| cache: true
+
+fitted_df <- calc_fitted_vals(list_of_draws = list_of_draws, y.mat = y.mat, complete.data = complete.data, y.df = y.df)
+# fitted_df retains order of y.vec, unlike lengths
+
+obs <- fitted_df$Avg_Len
+obs_pp <- apply(list_of_draws$y_pp, 1, \(x) x + mean(y.vec)) |> t()
+
+bayesplot::ppc_violin_grouped(y = obs, yrep = obs_pp, group = round(fitted_df$Age_Month, 2), y_draw = 'points', y_alpha = 0.25) +
+  labs(y = 'Length (mm)', x = 'Age') +
+  geom_vline(xintercept = c(7.5,14.5)) +
+  theme(axis.text.x = element_blank()) +
+  annotate(geom = 'text', x = c(3.75, 10.75, 17.75), y = rep(30, 3), label = paste('Age', 1:3), hjust = 'center') +
+  bayesplot:::scale_fill_ppc(values = c(NA, 
+        bayesplot:::get_color("l")), labels = c('Obs. length', 'PP Length')) +
+  bayesplot:::scale_color_ppc(labels = c('Obs. length', 'PP Length'))
+```
+
+{{< pagebreak >}}
+
+```{r}
+#| label: fig-process-errs
+#| fig-cap: "Growth model process errors by age. Each box represents one month. Numbers are the average number of shrimp measured each month per state area per year. They are offset from the process errors to emphasize that each process error relies on measurments during two consecutive months. Adjacent wintertime distributions look identical because there is no data collected during those months (i.e., blank spaces indicate sample sizes of zero)."
+#| fig-width: 7.5
+yr.seq <- sort(unique(lengths$Year_Class))
+# Var2 is monthly time steps
+# Var3 is cohort
+N.count <- lengths |>
+  group_by(Age_Month) |>
+  summarize(N = round(mean(N), 0))
+
+reshape2::melt(list_of_draws$pro_dev,
+               value.name = 'pro_dev') %>%
+  mutate(Year_Class = yr.seq[Var3],
+         Age_Month = round(as.numeric(
+           names(y.df)[-(1:3)][Var2]),2)) |>
+  group_by(Age_Month, Year_Class) |>
+  summarize(pro_dev = mean(pro_dev)) |>
+  mutate(winter = Age_Month %in% c(1.83, 1.92, 2, 2.08, 2.17, 2.25,
+                                   2.83, 2.92, 3, 3.08, 3.17, 3.25),
+         year_month = Year_Class + Age_Month,
+         pro_dev_yr = floor(year_month)-1) |>
+  ggplot() +
+  geom_boxplot(aes(x = Age_Month, y = pro_dev, group = Age_Month, fill = winter)) +
+  geom_text(aes(x = Age_Month-1/24, y = 0.3, label = N), data = N.count, size = 2) +
+  geom_hline(yintercept = 0) +
+  theme_classic() +
+  scale_fill_manual(values = c('tomato', 'royalblue3'), labels = c(`TRUE` = 'Winter', `FALSE` = 'Summer')) +
+  labs(x = 'Age (yrs)', y = 'Process error (mm)', fill = '')
+
+```
