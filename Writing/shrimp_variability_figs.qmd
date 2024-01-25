@@ -34,11 +34,11 @@ tibble(Symbol = c('Indices',
                   '$\\alpha_s$', '$m_a$', '$\\hat{L}_{a,c,r}$',
                   '$\\delta_{a,c,r}$','$\\sigma_{L1}$', '$\\sigma_{p}$',
                   '$\\sigma_{o}$', '$\\sigma_{r}$', '$\\mathbf{\\beta}$', 
-                  '$\\mathbf{X}_c$',
+                  '$\\mathbf{x}_c$',
                   'Bioeconomic model variables',
                   '$N_a$', '$I_\\text{open}$', '$F$', '$C_a$'),
        Description = c('', 'Age (in months)', 'Cohort (in years)', 'Region (state area)',
-                       '', 'Length at age $a$ of cohort $c$ in region $r$ (mm)',
+                       '', 'Model-predicted length at age $a$ of cohort $c$ in region $r$ (mm)',
                        'Average length of age 1 shrimp in April (recruitment)',
                        'Effect of region $r$ on size at recruitment',
                        'Process error for cohort $c$ at age $a$',
@@ -51,13 +51,13 @@ tibble(Symbol = c('Indices',
                        'Standard deviation of annual size at recruitment variation ($\\varepsilon_1$)',
                        'Standard deviation of process error ($\\varepsilon_a, a\\neq 1$)',
                        'Standard deviation of observation error ($\\delta$)',
-                       'Standard deviation of regional size at recruitment variation ($\\gamma$)',
-                       'Vector of effects of environmental variables on size at recruitment',
+                       'Standard deviation of regional size-at-recruitment variation ($\\gamma$)',
+                       'Vector of effects of environmental variables on size-at-recruitment',
                        'Vector of environmental variables for cohort $c$',
-                       '', 'Number of shrimp per recruit at age $a$',
+                       '', 'Number of shrimp-per-recruit at age $a$',
                        'Indicator variable equal to 1 if the fishery is open and 0 otherwise',
                        'Fishing mortality rate (mo$^{-1}$)', 
-                       'Catch in numbers per recruit at age $a$')) |>
+                       'Catch-in-numbers per recruit at age $a$')) |>
   knitr::kable(align = c('l', 'l'))
 ```
 
@@ -68,8 +68,8 @@ tibble(Symbol = c('Indices',
 #| tbl-cap: "Revenue per recruit model parameters"
 
 tibble(Symbol = c("$M_s$", "$M_w$", "$aL^b$", "$\\text{Price}=b_0+b_1\\text{CPP}$"),
-       Description = c("Summer natural mortality",
-                       "Winter natural mortality",
+       Description = c("Summer natural mortality (Gallagher et al., 2004)",
+                       "Winter natural mortality (Gallagher et al., 2004)",
                        "Weight-length relationship",
                        "Price-count per pound relationship"),
        Value = c('0.09 mo$^{-1}$',
@@ -84,7 +84,7 @@ tibble(Symbol = c("$M_s$", "$M_w$", "$aL^b$", "$\\text{Price}=b_0+b_1\\text{CPP}
 
 ```{r}
 #| label: tbl-mod-est
-#| tbl-cap: Estimates of global (non-hierarchical) parameters for base model (no covariates). Mean is the posterior mean, sd is the standard deviation of the parameter estimate, n_eff is effective number of MCMC draws, 2.5% and 97.5% cover the 95% credible interval of the parameter, 50% is the posterior median, and Rhat is a convergence diagnostic that compares variability within and among chains and should be close to one.
+#| tbl-cap: Estimates of global (non-hierarchical) parameters for base model (no environmental covariates). Mean is the posterior mean, sd is the standard deviation of the parameter estimate, n_eff is effective number of MCMC draws, 2.5% and 97.5% cover the 95% credible interval of the parameter, 50% is the posterior median, and Rhat is a convergence diagnostic that compares variability within and among chains and should be close to one.
 #| cache: true
 
 to_summarize_ind <- sapply(mod@par_dims, \(x) length(x)==0) & 
@@ -124,6 +124,8 @@ loo_est |>
                            grepl('cuti_all_lat_sq', Model) ~ 'CUTI + CUTI$^2$',
                            grepl('beuti_all_lat\\.', Model) ~ 'BEUTI',
                            grepl('beuti_all_lat_sq', Model) ~ 'BEUTI + BEUTI$^2$',
+                           grepl('sst\\.', Model) ~ 'SST',
+                           grepl('sst_sq', Model), ~ 'SST + SST$^2$',
                            grepl('Log_R', Model) ~ 'Log(R)')) |>
   select(Model, ELPD = elpd_loo, `$\\Delta$ELPD` = elpd_diff, `SE($\\Delta$ELPD)` = se_diff) |>
   knitr::kable(digits = 2)
@@ -133,15 +135,13 @@ loo_est |>
 
 # Figures
 
-![Map of state statistical areas (courtesty of ODFW)](../figures/shrimp_areas.png){#fig-map width="4in"}
-
-Maybe put map in supplement?
+![Map of the state statistical areas (courtesy of ODFW)](../figures/shrimp_areas.png){#fig-map width="4in"}
 
 {{< pagebreak >}}
 
 ```{r}
 #| label: fig-obs-data
-#| fig-cap: "Length at age of shrimp by recruitment year and state area. State area number increases with latitude (i.e., area 32 borders Canada and area 12 is in California). See @fig-map for a map of state areas."
+#| fig-cap: "Length-at-age of pink shrimp by recruitment year and state area. State area number increases with latitude (i.e., area 32 borders Canada and area 12 is in California; @fig-map)."
 #| fig-height: 3.5
 #| fig-width: 6.5
 
@@ -177,16 +177,26 @@ cowplot::plot_grid(by_time, by_space, nrow = 1, labels = 'auto', label_colour = 
 
 ```{r}
 #| label: fig-base
-#| fig-cap: "Revenue per recruit as a function of fishing mortality rates for five different fishery opening dates and three different natural mortality rates. Dotted lines are at the low and high range of estimated fishing mortality in the fishery."
+#| fig-cap: "Revenue-per-recruit as a function of fishing mortality rates for five fishery opening dates and three natural mortality scenarios. Dotted lines are at the low and high range of estimated fishing mortality in the fishery. Uncertainty ribbon is the 95% credible interval, accounting for uncertainty from the growth model estimates, of the line for April 1 (status quo)."
 #| fig-height: 3.5
 #| fig-width: 6.5
 
+early_opening <- rpr_base_summary |>
+  filter(opening == 1) |>
+  mutate(M.multiplier = recode(factor(M.multiplier), 
+                               '1.25' = '25% increase in M',
+                               '1' = 'Base M',
+                               '0.75' = '25% decrease in M')) 
 rpr_base_summary |>
   mutate(M.multiplier = recode(factor(M.multiplier), 
                                '1.25' = '25% increase in M',
                                '1' = 'Base M',
                                '0.75' = '25% decrease in M')) |>
   ggplot() +
+  geom_ribbon(aes(x = FF, ymin = low, ymax = high), 
+              fill = PNWColors::pnw_palette('Shuksan2', 5)[1],
+              alpha = 0.1, 
+              data = ~ subset(., opening == 1)) +
   geom_line(aes(x = FF, y = mid, col = opening_fct, group = opening_fct)) +
   labs(x = 'F (1/mo)', y = 'Revenue per recruit', col = 'Opening date') +
   facet_wrap(~factor(M.multiplier)) +
@@ -195,13 +205,11 @@ rpr_base_summary |>
   geom_vline(xintercept = 0.2, col = theme_get()$axis.ticks$colour, lty = 'dotted')
 ```
 
-I have 2000 MCMC draws for each line so could provide measures of uncertainty (at least in growth) for this figure and those that follow. Is that worth it? It could get busy?
-
 {{< pagebreak >}}
 
 ```{r}
 #| label: fig-areas
-#| fig-cap: "Revenue per recruit as a function of fishing mortality rates for each state area, from Northern California (12, upper left) to the Canadian border (32, bottom right). Note that area 12 has a low sample size, and is pulled strongly to the global mean. Dotted lines are at the low and high range of estimated fishing mortality in the fishery. See @fig-map for a map of state areas."
+#| fig-cap: "Revenue-per-recruit as a function of fishing mortality rates for each state area, from Northern California (12, upper left) to the Canadian border (32, bottom right). Note that area 12 has a low sample size, and is pulled strongly to the global mean. Dotted lines are at the low and high range of estimated fishing mortality in the fishery. See @fig-map for a map of the state areas."
 #| fig-dpi: 200
 
 rpr_by_area_summary |>
@@ -218,7 +226,7 @@ rpr_by_area_summary |>
 
 ```{r}
 #| label: fig-years
-#| fig-cap: "Revenue per recruit for different potential season opening dates based on estimated size at recruitment each year at low (0.03), average (0.1) and high (0.2) fishing mortality rates."
+#| fig-cap: "Revenue-per-recruit for different potential season opening dates based on estimated size-at-recruitment each year at low (0.03), average (0.1) and high (0.2) fishing mortality rates at the mean location."
 #| fig-height: 3.5
 #| fig-width: 6.5
 
@@ -250,13 +258,11 @@ rpr_by_yr_summary |>
   labs(x = 'Recruitment year', y = 'Revenue per recruit', col = 'Opening date') 
 ```
 
-I could make @fig-years like @fig-areas with one panel per year, or make @fig-areas like @fig-years, with only three panels. I thought 12 panels was fine so kept it that way, but 30 was too many so tried to find a way to summarize it.
-
 {{< pagebreak >}}
 
 ```{r}
 #| label: fig-area-year
-#| fig-cap: "Revenue per recruit as a function of fishing mortality rates for the state areas with the smallest (32) and largest (19) size at recruitment and in the years with the smallest (2011) and largest (1991) sizes at recruitment coastwide. Dotted lines are at the low and high range of estimated fishing mortality in the fishery. See @fig-map for a map of state areas."
+#| fig-cap: "Revenue-per-recruit as a function of fishing mortality rates for the state areas with the smallest (32) and largest (19) size-at-recruitment and in the years with the smallest (2011) and largest (1991) sizes-at-recruitment coastwide. Dotted lines are at the low and high range of estimated fishing mortality in the fishery. See @fig-map for a map of state areas."
 
 rpr_st_summary |>
     mutate(area = paste('Area', area)) |>

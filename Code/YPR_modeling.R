@@ -141,7 +141,11 @@ n_month <- N
 season <- rep('S', n_month)
 season[c(8:12, 20:24)] <- 'W'
 
-ypr.list <- list(n_month = n_month, season = season, max_cpp = NA, Ms = 0.09, 
+ypr.list <- list(n_month = n_month, 
+                 season = season, 
+                 max_cpp = NA, 
+                 # max_cpp = 160,
+                 Ms = 0.09, 
                  Mw = 0.06)
 
 n_FF <- 50

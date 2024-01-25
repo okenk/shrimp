@@ -3,7 +3,7 @@ library(tidyverse)
 
 # I changed the name of the 2006 file from 2006mltableexc.xls to 2006mltable.xls so this loop would work
 length_by_yr <- list()
-yrs <- 1989:2013
+yrs <- 1989:2007
 
 for(year in yrs) {
   filename <- paste0('Data/shrimp_length_files/', year, 'mltable.xls')
@@ -18,27 +18,24 @@ for(year in yrs) {
     mutate(Year = year,
            Month = str_sub(str_to_upper(Month), end = 3), # month formatting varied, this ensures consistency
            Month_Num = sapply(Month, function(x) switch(x, APR = 4,
-                                                               MAY = 5,
-                                                               JUN = 6,
-                                                               JUL = 7,
-                                                               AUG = 8,
-                                                               SEP = 9,
-                                                               OCT = 10))) %>%
+                                                        MAY = 5,
+                                                        JUN = 6,
+                                                        JUL = 7,
+                                                        AUG = 8,
+                                                        SEP = 9,
+                                                        OCT = 10))) %>%
     rename(Area = State_Area)
 }
 
-# The warnings are from all the cells with data (as opposed to --) for years 2006 and later and I can't figure out why! 
-# But the data frames looked correct once I specified col_types.
-
-indiv_data <- read_excel('Data/2014-2018 OR pink shrimp.xlsx') %>%
+indiv_data <- read_excel('Data/allshrimp.xlsx', sheet = 'rework') %>%
+  filter(!is.na(Age)) %>% 
   mutate(Area = as.character(Area)) %>%
   group_by(Year, Month, Area, Age) %>%
   summarize(Avg_Len = mean(CL),
             N = n(),
-            sd = sd(CL)) %>%
-  rename(Month_Num = Month) %>%
-  mutate(Month = str_sub(str_to_upper(month.name[Month_Num]), end = 3)) # text version of month
-
+            sd = sd(CL),
+            Month_Num = mean(MO.)) %>%
+  mutate(Month = str_sub(str_to_upper(Month), end = 3)) # text version of month, 3 characters
 
 lengths <- do.call(bind_rows, length_by_yr) %>%
   bind_rows(indiv_data)

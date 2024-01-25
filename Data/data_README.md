@@ -41,7 +41,7 @@ Files in the Data folder:
 
 -   shrimp mean carapace length (mm).xlsx: average length by age, month, area, year for each port sample collected.
 
--   2014-2018 OR pink shrimp.xlsx: length, age, area, month, year, lots of other info, for each *individual* shrimp sampled 2014-2018 (rather than average across each bulk port sample). This data is all in the rework tab of allshrimp.xlsx, which has more years. File is sticking around so as not to break existing code.
+-   2014-2018 OR pink shrimp.xlsx: length, age, area, month, year, lots of other info, for each *individual* shrimp sampled 2014-2018 (rather than average across each bulk port sample). This data is all in the rework tab of allshrimp.xlsx, which has more years. 
 
 -   CC_SSH.csv: data downloaded on sea surface height. I do not know the source! Ahh! Fortunately Ridouan has better oceanographic data to use.
 
@@ -52,10 +52,16 @@ Files in the Data folder:
 -   X_shrimp.csv: received from R. Bani 7/7/21. Oceanographic variables processed from ROMS model. year = larval release year. Y = VPE? Did not provide metadata explaining columns. I *believe* CS = cross shelf, LS = along shelf, TLT something about temperature, juv vs adult relates to depth range captured from model. (Adult is more narrow range.)
 
     -   This is a lot of variables for this few years? Do we really want monthly for the whole summer?
+    -   This data was superceded by a more pared down variable set, and then I opted to collate environmental data myself
 
--   data_per_state_area: folder of csv files, one file for each oceanographic variable with columns for each state area
+-   data_per_state_area: folder of csv files, one file for each oceanographic variable with columns for each state area. Alas, spatial model broke my computer.
 
 -   data_glorys.csv, data_roms.csv, data_roms_glorys.csv: received from R. Bani 4/25/22. Oceanographic variables. 
     -   ROMS = 1980-2010, GLORYS = 1993-2019, ROMS + GLORYS = 1980-2019 BUT no corrections done to connect the two models. GLORYS used 1993 onward.
     -   BLT: bottom layer temp?, TLT: top layer temp?, CST: cross-shelf transport?, LST: long-shelf transport?
     -   precond: months, brood: months, spwn: months, lrvl_phase: months.
+    -   Because he did not provide any documentation before departing, this data is not used
+    
+-   BEUTI_monthly.csv, CUTI_monthly.csv: CUTI and BEUTI, downloaded from https://oceanview.pfeg.noaa.gov/products/upwelling/cutibeuti on 11/17/23.
+
+-   nceiErsstv5_LonPM180_24fe_b874_defd.csv: SST data, downloaded from https://coastwatch.pfeg.noaa.gov/erddap/griddap/nceiErsstv5_LonPM180.html on 1/23/24.

@@ -24,7 +24,7 @@ fit_growth_mod <- function(input_data, covar, covar_name, mcmc_control = list())
               iter = 4000, chains = 4, cores = 4,
               seed = 2309853209,
               # algorithm = 'Fixed_param',
-              #iter=100, chains=1,
+              # iter=100, chains=4, cores = 4,
               #thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
               control = list(adapt_delta = 0.9, max_treedepth = 15))
   save(mod, file = here(glue::glue('Code/covars/model_fit_{covar_name}.RData')))
@@ -35,7 +35,6 @@ fit_growth_mod <- function(input_data, covar, covar_name, mcmc_control = list())
   return(loo_est)
 }
 
-ii <- 1
 input_data <- list(N = N, M = M, y = y.vec - mean(y.vec),  
      cohorts = cohorts, 
      S = max(cohorts), 
@@ -46,14 +45,15 @@ input_data <- list(N = N, M = M, y = y.vec - mean(y.vec),
      row_indx_pos = complete.data[,1], 
      est_pro_dev = 1,
      est_area_offset = 1,
-     calc_ppd = 0, samp_size = n.vec
+     calc_ppd = 0
 )
 
 ## This runs the MCMC and calculates LOOIC
-vars_to_use <- c(as.list(names(covar.all)[1:3]),
+vars_to_use <- c(as.list(names(covar.all)[1:4]),
                  list(c('cuti_all_lat', 'cuti_all_lat_sq')),
-                 list(c('beuti_all_lat', 'beuti_all_lat_sq')))
-# vars_to_use <- vars_to_use[[1]]
+                 list(c('beuti_all_lat', 'beuti_all_lat_sq')),
+                 list(c('sst', 'sst_sq')))
+# vars_to_use <- vars_to_use[c(3,7)]
 plan(list(tweak(multisession, workers = 2), tweak(multisession, workers = 4)))
 xx <- vars_to_use %>%
   future_map(\(.x) fit_growth_mod(input_data = input_data,

@@ -1,6 +1,8 @@
 ---
 editor: visual
 format: docx
+crossref:
+  fig-title: "Fig. S"
 ---
 
 ```{r opts, echo = FALSE, include = FALSE, warning = FALSE, message = FALSE}
@@ -39,8 +41,26 @@ calc_fitted_vals <- function(list_of_draws, y.mat, complete.data,
 ```
 
 ```{r}
+#| label: fig-lw-mod
+#| fig-cap: Length-weight data with fitted model
+
+weight.dat <- readxl::read_excel(here('Data/Kiva.xlsx'), sheet = 'weights')
+weight.length.mod <- lm(log(Weight) ~ log(CL), data = weight.dat)
+
+weight.dat |>
+  mutate(pred_wt = exp(coef(weight.length.mod)[1] + 0.5 * sigma(weight.length.mod)^2) * 
+           CL^coef(weight.length.mod)[2]) |>
+  ggplot() +
+  geom_point(aes(x = CL, y = Weight), alpha = 0.05) +
+  geom_line(aes(x = sort(CL), y = pred_wt[order(CL)]), col = 'red') +
+  labs(x = 'Carapace length (mm)', y = 'Weight (g)')
+```
+
+{{< pagebreak >}}
+
+```{r}
 #| label: fig-model-fits
-#| fig-cap: "Posterior predicted distribution (PP Length) and observed data for base model. Each tick on the x-axis is one month; solid vertical lines separate years. Data replicates are across state areas and years."
+#| fig-cap: "Posterior predicted distribution (PP Length) and observed data for the base model. Each tick on the x-axis is one month; solid vertical lines separate years. Data replicates are across state areas and years."
 #| cache: true
 
 fitted_df <- calc_fitted_vals(list_of_draws = list_of_draws, y.mat = y.mat, complete.data = complete.data, y.df = y.df)
@@ -63,7 +83,7 @@ bayesplot::ppc_violin_grouped(y = obs, yrep = obs_pp, group = round(fitted_df$Ag
 
 ```{r}
 #| label: fig-process-errs
-#| fig-cap: "Growth model process errors by age. Each box represents one month. Numbers are the average number of shrimp measured each month per state area per year. They are offset from the process errors to emphasize that each process error relies on measurments during two consecutive months. Adjacent wintertime distributions look identical because there is no data collected during those months (i.e., blank spaces indicate sample sizes of zero)."
+#| fig-cap: "Growth model process errors by age. Each box represents one month. Numbers are the average numbers of shrimp measured each month per state area per year. They are offset from the process errors to emphasize that each process error relies on measurements during two consecutive months. Adjacent wintertime distributions look identical because no data are collected during those months (i.e., blank spaces indicate sample sizes of zero)."
 #| fig-width: 7.5
 yr.seq <- sort(unique(lengths$Year_Class))
 # Var2 is monthly time steps
@@ -83,7 +103,13 @@ reshape2::melt(list_of_draws$pro_dev,
                                    2.83, 2.92, 3, 3.08, 3.17, 3.25),
          year_month = Year_Class + Age_Month,
          pro_dev_yr = floor(year_month)-1) |>
+  # filter(!winter) |>
   ggplot() +
+  # geom_raster(aes(x = pro_dev_yr, y = Age_Month, fill = pro_dev), pointsize = 3) +
+  # scale_fill_gradientn(colours = rev(LaCroixColoR::lacroix_palette('Orange', 10))) +
+  # geom_hline(yintercept = 2) +
+  # geom_hline(yintercept = 3) +
+  # labs(x = 'Year', y = 'Age')
   geom_boxplot(aes(x = Age_Month, y = pro_dev, group = Age_Month, fill = winter)) +
   geom_text(aes(x = Age_Month-1/24, y = 0.3, label = N), data = N.count, size = 2) +
   geom_hline(yintercept = 0) +
