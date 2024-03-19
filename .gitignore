@@ -11,10 +11,7 @@ Code/mcmc_run.RData
 *.png
 Data/allshrimp.xlsx
 *shrimp_tickets.csv
-<<<<<<< HEAD
-=======
 *Dan_cpp.csv
->>>>>>> 13e119870c96c45c7bc35f93e643543f678b8ada
 # MS tmp files
 *~$*
 *.tmp
@@ -22,8 +19,4 @@ Data/allshrimp.xlsx
 *supp.docx
 *figs.docx
 *cover_letter.docx
-<<<<<<< HEAD
 Data/archive/*
-=======
-Data/archive/*
->>>>>>> 13e119870c96c45c7bc35f93e643543f678b8ada
