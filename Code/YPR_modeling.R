@@ -1,5 +1,5 @@
 source(here('code/length_data_manip.R'))
-load(here('Code/covars/base.RData'))
+mod <- readRDS(here('Code/covars/base.Rds'))
 list_of_draws <- rstan::extract(mod)
 season_num <- sin(pi*(1:N+1)%%12/6) # consistent w/stan model implementation
 
@@ -154,8 +154,9 @@ FF_seq <- seq(0, 0.3, length.out = n_FF)
 # Accounting for spatial variation
 wt_ls <- purrr::array_tree(pred_wt, margin = 2)
 
-rpr_by_area_long <- expand.grid(FF_seq = FF_seq, opening = 1:5, area = 1:12) %>%
-  as_tibble() %>%
+rpr_by_area_long <- expand.grid(FF_seq = FF_seq, opening = 1:5, 
+                                area = 1:length(unique(y.df$Area))) %>%
+  as_tibble() %>% 
   purrr::pmap_dfr(function(FF_seq, opening, area)
     get_ypr(FF = FF_seq, opening = opening, metric = 'revenue', 
             setup.list = c(ypr.list, pred_wt = wt_ls[area])) %>%

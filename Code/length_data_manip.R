@@ -45,28 +45,26 @@ sst <- readr::read_csv(here('data/nceiErsstv5_LonPM180_24fe_b874_defd.csv'), ski
   group_by(year) |>
   summarise(sst = mean(sst))
 
-biomass <- here('Data/OR-VPE.XLSX') %>%
+biomass <- here('Data/VPE-update-02022024.xlsx') %>%
   read_excel() %>% 
-  mutate('Year' = `Spawn Year`, # this naming scheme makes no sense to me, but I *think* spawn year is the year the cohort is age 1.
-         Std_Log_Bio = standardize_vec(`OR log VPE`),
-         Std_Bio = standardize_vec(`OR VPE calculated`),
-         Log_R = log(`OR Age 1`)) %>%
-  select(Year, Std_Log_Bio, Std_Bio, Log_R, `North Log VPE`, `South Log VPE`, `OR Age 1`) %>%
+  mutate(Log_R = log(`OR VPE`)) %>%
+  select(Year = `Spawn Year`, Log_R) %>%
   filter(!is.na(Log_R))
 
 lengths <- here('Data/Compiled_Lengths.csv') %>%
   readr::read_csv(col_types = 'cdcddddd') %>%
   mutate(Age_Month = Age + Month_Num/12,
-         Year_Class = Year) %>% # This was being offset to larval release year. Paper and covariates were treated as if this was year recruiting to fishery
-                                # This approach of doubling up on the column minimizes chance for error from eliminating column altogether.
-  filter(Year_Class >= min(cuti$year))
+         Year_Class = Year - Age + 1) %>% # Year class is year they recruit to fishery @Age 1
+  filter(Year_Class >= min(cuti$year),
+         Area != '12', # Area 12 was only ever sampled in Sep and Oct, 2018.
+         Age != 0) # Not modeling age 0's.
 
 # Setting up for Stan model
 y.df <- lengths %>%
   # select(-(Std_Log_Bio:Std_Log_Bio_Regional), -N) %>%
   select(-N) %>%
   bind_rows(tibble(Age_Month = c(1+11/12, 2 + c(0, 1/12, 2/12, 3/12, 11/12), 3+c(0, 1/12, 2/12, 3/12)),
-                   Year_Class = 2015, Area = as.character(12))) %>% # This adds columns for wintertime months
+                   Year_Class = 2015, Area = as.character(18))) %>% # This adds columns for wintertime months
   select(-Month, -Age, -Month_Num, -Year, -sd) %>%
   spread(key = Age_Month, value = Avg_Len) %>%
   mutate(Big_Area = case_when(Area <= 18 ~ 3,
@@ -90,9 +88,8 @@ to.add <- select(y.df, !(Area:Year_Class)) %>%
   names() %>%
   as.numeric() %>%
   floor()
-
 year.df <- y.df
-year.df[,-(1:3)] <- sapply(y.df$Year_Class, function(x) x + to.add) %>% t()
+year.df[,-(1:3)] <- sapply(y.df$Year_Class, function(x) x + to.add - 1) %>% t()
 
 complete.data <- which(!is.na(y.mat), arr.ind = TRUE)
 n_pos <- nrow(complete.data)
@@ -101,11 +98,7 @@ area.vec <- area.mat[which(!is.na(y.mat))]
 
 cohorts <- as.numeric(as.factor(y.df$Year_Class))
 areas <- as.numeric(as.factor(y.df$Area))
-big.areas <- y.df$Big_Area
-
-area.locations <- here('Data/area_locations.csv') %>%
-  readr::read_csv() %>%
-  arrange(Area)
+big.areas <- y.df$Big_Area # from failed hierarchical spatial model
 
 covar.all <- tibble(year = y.df$Year_Class, cohorts) %>%
   group_by(year) %>%

@@ -27,12 +27,8 @@ fit_growth_mod <- function(input_data, covar, covar_name, mcmc_control = list())
               # iter=100, chains=4, cores = 4,
               #thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
               control = list(adapt_delta = 0.9, max_treedepth = 15))
-  save(mod, file = here(glue::glue('Code/covars/model_fit_{covar_name}.RData')))
-
-  log_lik <- extract_log_lik(mod, merge_chains = FALSE)
-  r_eff <- relative_eff(exp(log_lik), cores = 4)
-  loo_est <- loo(log_lik, r_eff = r_eff, cores = 4)
-  return(loo_est)
+  saveRDS(mod, file = here(glue::glue('Code/covars/model_fit_{covar_name}.Rds')))
+  # save(mod, file = here(glue::glue('Code/covars/model_fit_{covar_name}.RData')))
 }
 
 input_data <- list(N = N, M = M, y = y.vec - mean(y.vec),  
@@ -49,51 +45,46 @@ input_data <- list(N = N, M = M, y = y.vec - mean(y.vec),
 )
 
 ## This runs the MCMC and calculates LOOIC
-vars_to_use <- c(as.list(names(covar.all)[1:4]),
-                 list(c('cuti_all_lat', 'cuti_all_lat_sq')),
-                 list(c('beuti_all_lat', 'beuti_all_lat_sq')),
-                 list(c('sst', 'sst_sq')))
-# vars_to_use <- vars_to_use[c(3,7)]
-plan(list(tweak(multisession, workers = 2), tweak(multisession, workers = 4)))
-xx <- vars_to_use %>%
-  future_map(\(.x) fit_growth_mod(input_data = input_data,
-                                  covar = select(covar.all, tidyr::all_of(.x)),
-                                  covar_name = tail(.x, 1)))
-
 # Run base model (no covariates)
 base_input <- input_data
 base_input$calc_ppd <- 1
 base_input$n_covar <- 0
 base_input$covar_dat <- matrix(0, nrow = nrow(covar.all), ncol=0)
 mod <- stan(here('Code/growth_model.stan'), 
-                data = base_input,
-                pars = c('x0_mean', 'sigma_x0', 'x0', 
-                         'area_offset',
-                         'sigma_area', 
-                         'U', 'B', 'U_season', 
-                         'sigma_process', 
-                         'sigma_obs', 
-                         'pred_vec', 
-                         'pro_dev', 'covar_par',
-                         'log_lik', 'y_pp'
-                ), 
-                iter = 4000, chains = 4, cores = 4,
-                #iter=100, chains=1,
-                #thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
-                control = list(adapt_delta = 0.9, max_treedepth = 15))
-save(mod, file = here('Code/covars/base.Rdata'))
-log_lik <- extract_log_lik(mod, merge_chains = FALSE)
-r_eff <- relative_eff(exp(log_lik), cores = 4)
-loo_est <- loo(log_lik, r_eff = r_eff, cores = 4)
-xx[[6]] <- loo_est
+            data = base_input,
+            pars = c('x0_mean', 'sigma_x0', 'x0', 
+                     'area_offset',
+                     'sigma_area', 
+                     'U', 'B', 'U_season', 
+                     'sigma_process', 
+                     'sigma_obs', 
+                     'pred_vec', 
+                     'pro_dev', 'covar_par',
+                     'log_lik', 'y_pp'
+            ), 
+            iter = 4000, chains = 4, cores = 4,
+            #iter=100, chains=1,
+            #thin = mcmc_list$n_thin, warmup = mcmc_list$n_burn,
+            control = list(adapt_delta = 0.9, max_treedepth = 15))
+saveRDS(mod, file = here('Code/covars/base.Rds'))
+
+# Covariate models
+vars_to_use <- c(as.list(names(covar.all)[1:4]),
+                 list(c('cuti_all_lat', 'cuti_all_lat_sq')),
+                 list(c('beuti_all_lat', 'beuti_all_lat_sq')),
+                 list(c('sst', 'sst_sq')))
+# vars_to_use <- vars_to_use[-4]
+plan(list(tweak(multisession, workers = 2), tweak(multisession, workers = 4)))
+vars_to_use %>%
+  future_walk(\(.x) fit_growth_mod(input_data = input_data,
+                                  covar = select(covar.all, tidyr::all_of(.x)),
+                                  covar_name = tail(.x, 1)))
 
 ## This calculates LOOIC based on pre-run MCMC chains.
 plan(list(tweak(multisession, workers = 2), tweak(multisession, workers = 4)))
 loo_est <- future_map(list.files(here('Code/covars')), \(.x) {
-  load(here('Code', 'covars', .x))
-  log_lik <- extract_log_lik(mod, merge_chains = FALSE)
-  r_eff <- relative_eff(exp(log_lik), cores = 4) 
-  loo_est <- loo(log_lik, r_eff = r_eff, cores = 4)
+  mod <- readRDS(here('Code', 'covars', .x))
+  loo_est <- loo(mod)
   return(loo_est)
 })
 names(loo_est) <- list.files(here('Code/covars'))

@@ -2,8 +2,14 @@
 editor: visual
 format: docx
 crossref:
+  ref-hyperlink: false
   fig-title: "Fig. S"
+  fig-prefix: "Fig. S"
+  tbl-title: "Table S"
+  tbl-prefix: "Table S"
 ---
+
+# Supplemental figures
 
 ```{r opts, echo = FALSE, include = FALSE, warning = FALSE, message = FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, dpi = 500)
@@ -11,7 +17,7 @@ library(here)
 library(ggplot2)
 library(rstan)
 source(here('code/length_data_manip.R'))
-load(here('code/covars/base.rdata'))
+mod <- readRDS(here('code/covars/base.rds'))
 load(here('code/rpr.rdata'))
 theme_set(ggsidekick::theme_sleek())
 
@@ -83,7 +89,7 @@ bayesplot::ppc_violin_grouped(y = obs, yrep = obs_pp, group = round(fitted_df$Ag
 
 ```{r}
 #| label: fig-process-errs
-#| fig-cap: "Growth model process errors by age. Each box represents one month. Numbers are the average numbers of shrimp measured each month per state area per year. They are offset from the process errors to emphasize that each process error relies on measurements during two consecutive months. Adjacent wintertime distributions look identical because no data are collected during those months (i.e., blank spaces indicate sample sizes of zero)."
+#| fig-cap: "Growth model process errors by age. Each box represents one month. Numbers are the average numbers of shrimp measured each month per state area per year. They are offset from the process errors to emphasize that each process error relies on measurements during two consecutive months. Adjacent wintertime distributions look identical because no data are collected during those months (i.e., blank spaces indicate sample sizes of zero). Individual points are process errors outliers falling beyond 1.5 times the interquartile range of process errors for that month"
 #| fig-width: 7.5
 yr.seq <- sort(unique(lengths$Year_Class))
 # Var2 is monthly time steps
@@ -118,3 +124,33 @@ reshape2::melt(list_of_draws$pro_dev,
   labs(x = 'Age (yrs)', y = 'Process error (mm)', fill = '')
 
 ```
+
+# Price model
+
+The price per pound for ocean shrimp (*Pandalus jordani*) landed in Oregon varies substantially from year to year without any clear seasonal or annual trends. Modeling the expected absolute price of ocean shrimp accurately would be extremely challenging and is beyond the scope of this study. Our primary interest here is to understand whether and how price varies with the size of shrimp as measured by count per pound. Prices tend to increase with size of the shrimp which is an important consideration when modeling revenue per recruit as a function of fishing mortality since maximum revenue per recruit will be achieved at relatively lower mortality levels when price increases with size relative to an assumption of constant price.
+
+We fit price models to data from fish tickets in PacFIN (Pacific Fishery Information Network; https://pacfin.psmfc.org/) between 2017-2020 that could be matched with ODFW biological port sampling data on count count per pound. Because prices are highly variable year-to-year and month-to-month without any clear trends, we use a fixed effect model with fixed effects for each year-month combination in the data. This allows us to isolate the effect of count per pound on price. We tried a number of different specifications including taking natural logs of price or count per pound or both. They all yield fairly similar relationships between count per pound and price (@fig-price-mod1) with little appreciable difference in how price changes. For simplicity, in our bioeconomic model, we use the simplest linear model formulation with both the dependent variable (price) and the explanatory variable (count per pound) untransformed and fixed effects or year-month combinations.
+
+The overall fit and predictive power of the model are poor, but the relationship between count per pound and price is statistically significant (p=0.001) (@tbl-price-mod) and is robust to the specification (@fig-price-mod1). As expected, count per pound did have a negative effect on price, reducing price per pound by around 20% over the range of commonly landed sizes (@fig-price-mod2).
+
+```{r}
+#| label: tbl-price-mod
+#| tbl-cap: Fixed effect model of Oregon ocean shrimp price
+
+options(knitr.kable.NA = '')
+tibble::tibble(Variable = c('Count per pound', 'Constant', '$\\sigma_u$',
+                            '$\\sigma_e$', '$\\rho$'),
+               Coef = c(-0.004, 1.431, 0.202, 0.519, 0.131),
+               SE = c(0.001, 0.143, NA, NA, NA),
+               P = c(0.001, 0.000, NA, NA, NA),
+               CI = c('(-0.006, -0.002)',
+                      '(1.150, 1.711)',
+                      NA, NA, NA)) |>
+  knitr::kable(escape = FALSE, 
+               col.names = c('Variable', 'Coef.', 'Std. Err.', 'P>t',
+                             '95% Conf. Int.'))
+```
+
+![Predicted prices as a function of count per pound with different specifications](../figures/price_model1.png){#fig-price-mod1}
+
+![Frequency distribution of count per pound for observations used in price model](../figures/price_model2.png){#fig-price-mod2}

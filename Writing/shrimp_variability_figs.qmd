@@ -11,7 +11,7 @@ library(here)
 library(ggplot2)
 library(rstan)
 source(here('code/length_data_manip.R'))
-load(here('code/covars/base.rdata'))
+mod <- readRDS(here('code/covars/base.rds'))
 load(here('code/rpr.rdata'))
 load(here('Code/loo_est.Rdata'))
 
@@ -75,7 +75,7 @@ tibble(Symbol = c("$M_s$", "$M_w$", "$aL^b$", "$\\text{Price}=b_0+b_1\\text{CPP}
        Value = c('0.09 mo$^{-1}$',
                  '0.06 mo$^{-1}$',
                  '$a = 0.00126$, $b = 2.78$ for length in mm, weight in g',
-                 '$b_0=1.4390$ (\\$), $b_1 = 0.00387$ (\\$ lbs)')
+                 '$b_0=1.4390$ (\\$), $b_1 = -0.00387$ (\\$ lbs)')
        ) |>
   knitr::kable(escape = FALSE, align = c('l', 'l'))
 ```
@@ -125,7 +125,7 @@ loo_est |>
                            grepl('beuti_all_lat\\.', Model) ~ 'BEUTI',
                            grepl('beuti_all_lat_sq', Model) ~ 'BEUTI + BEUTI$^2$',
                            grepl('sst\\.', Model) ~ 'SST',
-                           grepl('sst_sq', Model), ~ 'SST + SST$^2$',
+                           grepl('sst_sq', Model) ~ 'SST + SST$^2$',
                            grepl('Log_R', Model) ~ 'Log(R)')) |>
   select(Model, ELPD = elpd_loo, `$\\Delta$ELPD` = elpd_diff, `SE($\\Delta$ELPD)` = se_diff) |>
   knitr::kable(digits = 2)
@@ -181,12 +181,6 @@ cowplot::plot_grid(by_time, by_space, nrow = 1, labels = 'auto', label_colour = 
 #| fig-height: 3.5
 #| fig-width: 6.5
 
-early_opening <- rpr_base_summary |>
-  filter(opening == 1) |>
-  mutate(M.multiplier = recode(factor(M.multiplier), 
-                               '1.25' = '25% increase in M',
-                               '1' = 'Base M',
-                               '0.75' = '25% decrease in M')) 
 rpr_base_summary |>
   mutate(M.multiplier = recode(factor(M.multiplier), 
                                '1.25' = '25% increase in M',
@@ -274,3 +268,27 @@ rpr_st_summary |>
   geom_vline(xintercept = 0.03, col = theme_get()$axis.ticks$colour, lty = 'dotted') +
   geom_vline(xintercept = 0.2, col = theme_get()$axis.ticks$colour, lty = 'dotted')
 ```
+
+```{r}
+#| label: dont-run
+#| eval: false
+
+# code for text in paper:
+
+# approx line 322, "Across space, a wider range of fishing intensities supported later opening dates in state areas farther north" 
+rpr_by_area_summary |> 
+  pivot_wider(names_from = opening_fct, values_from = mid, id_cols = c(area, FF)) |> 
+  filter(`Apr 1` < `Jun 1`) |>
+  group_by(area) |>
+  slice(which.min(FF))
+
+# approx line 300, results of highest ELPD model
+mod_best <- readRDS(here('Code/covars/model_fit_Log_R.Rds'))
+mod_best_sum <- summary(mod_best, 
+                        pars = 'covar_par', 
+                        probs = c(0.025, 0.5, 0.975))
+mod_best_sum$summary
+
+
+```
+
