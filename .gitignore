@@ -11,6 +11,7 @@ Code/mcmc_run.RData
 *.png
 Data/allshrimp.xlsx
 *shrimp_tickets.csv
+*Dan_cpp.csv
 # MS tmp files
 *~$*
 *.tmp
