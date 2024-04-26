@@ -38,17 +38,17 @@ tibble(Symbol = c('Indices',
                   'Bioeconomic model variables',
                   '$N_a$', '$I_\\text{open}$', '$F$', '$C_a$'),
        Description = c('', 'Age (in months)', 'Cohort (in years)', 'Region (state area)',
-                       '', 'Model-predicted length at age $a$ of cohort $c$ in region $r$ (mm)',
+                       '', 'Model-predicted length-at-age $a$ of cohort $c$ in region $r$ (mm)',
                        'Average length of age 1 shrimp in April (recruitment)',
-                       'Effect of region $r$ on size at recruitment',
+                       'Effect of region $r$ on size-at-recruitment',
                        'Process error for cohort $c$ at age $a$',
                        'Average constant monthly growth increment',
                        'Effect of size on monthly growth increment',
                        'Effect of season (month) on growth increment',
                        'Month of year for shrimp of age $a$ months',
-                       'Observed average length at age $a$ of cohort $c$ in region $r$',
+                       'Observed average length-at-age $a$ of cohort $c$ in region $r$',
                        'Observation error for age $a$ of cohort $c$ in region $r$',
-                       'Standard deviation of annual size at recruitment variation ($\\varepsilon_1$)',
+                       'Standard deviation of annual size-at-recruitment variation ($\\varepsilon_1$)',
                        'Standard deviation of process error ($\\varepsilon_a, a\\neq 1$)',
                        'Standard deviation of observation error ($\\delta$)',
                        'Standard deviation of regional size-at-recruitment variation ($\\gamma$)',
@@ -64,27 +64,8 @@ tibble(Symbol = c('Indices',
 {{< pagebreak >}}
 
 ```{r}
-#| label: tbl-bioecon-model-pars
-#| tbl-cap: "Revenue per recruit model parameters"
-
-tibble(Symbol = c("$M_s$", "$M_w$", "$aL^b$", "$\\text{Price}=b_0+b_1\\text{CPP}$"),
-       Description = c("Summer natural mortality (Gallagher et al., 2004)",
-                       "Winter natural mortality (Gallagher et al., 2004)",
-                       "Weight-length relationship",
-                       "Price-count per pound relationship"),
-       Value = c('0.09 mo$^{-1}$',
-                 '0.06 mo$^{-1}$',
-                 '$a = 0.00126$, $b = 2.78$ for length in mm, weight in g',
-                 '$b_0=1.4390$ (\\$), $b_1 = -0.00387$ (\\$ lbs)')
-       ) |>
-  knitr::kable(escape = FALSE, align = c('l', 'l'))
-```
-
-{{< pagebreak >}}
-
-```{r}
 #| label: tbl-mod-est
-#| tbl-cap: Estimates of global (non-hierarchical) parameters for base model (no environmental covariates). Mean is the posterior mean, sd is the standard deviation of the parameter estimate, n_eff is effective number of MCMC draws, 2.5% and 97.5% cover the 95% credible interval of the parameter, 50% is the posterior median, and Rhat is a convergence diagnostic that compares variability within and among chains and should be close to one.
+#| tbl-cap: Estimates of global (non-hierarchical) parameters for the base model (no environmental covariates). Mean is the posterior mean, sd is the standard deviation of the parameter estimate, n_eff is effective number of MCMC draws, 2.5% and 97.5% cover the 95% credible interval of the parameter, 50% is the posterior median, and Rhat is a convergence diagnostic that compares variability within and among chains and should be close to one. See @tbl-mod-variables for description of variables.
 #| cache: true
 
 to_summarize_ind <- sapply(mod@par_dims, \(x) length(x)==0) & 
@@ -113,7 +94,7 @@ bind_cols(Variable = rownames(mod_sum$summary), mod_sum$summary) |>
 
 ```{r}
 #| label: tbl-model-selection
-#| tbl-cap: Expected log predictive density (ELPD) of candidate models and difference between each model and the model with the highest ELPD. Larger ELPDs indicate better predictive capacity.
+#| tbl-cap: Expected log predictive density (ELPD) of candidate models and the difference between each model and the model with the highest ELPD. Larger ELPDs indicate better predictive capacity.
 
 loo_est |>
   loo::loo_compare() |> 
@@ -135,13 +116,9 @@ loo_est |>
 
 # Figures
 
-![Map of the state statistical areas (courtesy of ODFW)](../figures/shrimp_areas.png){#fig-map width="4in"}
-
-{{< pagebreak >}}
-
 ```{r}
 #| label: fig-obs-data
-#| fig-cap: "Length-at-age of pink shrimp by recruitment year and state area. State area number increases with latitude (i.e., area 32 borders Canada and area 12 is in California; @fig-map)."
+#| fig-cap: "Length-at-age of pink shrimp by recruitment year and state area. State area number increases with latitude (i.e., area 32 borders Canada and area 18 is in northern California; see supplement)."
 #| fig-height: 3.5
 #| fig-width: 6.5
 
@@ -177,15 +154,15 @@ cowplot::plot_grid(by_time, by_space, nrow = 1, labels = 'auto', label_colour = 
 
 ```{r}
 #| label: fig-base
-#| fig-cap: "Revenue-per-recruit as a function of fishing mortality rates for five fishery opening dates and three natural mortality scenarios. Dotted lines are at the low and high range of estimated fishing mortality in the fishery. Uncertainty ribbon is the 95% credible interval, accounting for uncertainty from the growth model estimates, of the line for April 1 (status quo)."
+#| fig-cap: "Revenue-per-recruit as a function of fishing mortality rates for five fishery opening dates and three natural mortality scenarios. Dotted lines are at the low and high range of estimated fishing mortality in the fishery. The uncertainty ribbon is the 95% credible interval, accounting for uncertainty from the growth model estimates, of the line for April 1 (status quo)."
 #| fig-height: 3.5
 #| fig-width: 6.5
 
 rpr_base_summary |>
   mutate(M.multiplier = recode(factor(M.multiplier), 
-                               '1.25' = '25% increase in M',
+                               '1.25' = '1.25 Base M',
                                '1' = 'Base M',
-                               '0.75' = '25% decrease in M')) |>
+                               '0.75' = '0.75 Base M')) |>
   ggplot() +
   geom_ribbon(aes(x = FF, ymin = low, ymax = high), 
               fill = PNWColors::pnw_palette('Shuksan2', 5)[1],
@@ -203,7 +180,7 @@ rpr_base_summary |>
 
 ```{r}
 #| label: fig-areas
-#| fig-cap: "Revenue-per-recruit as a function of fishing mortality rates for each state area, from Northern California (12, upper left) to the Canadian border (32, bottom right). Note that area 12 has a low sample size, and is pulled strongly to the global mean. Dotted lines are at the low and high range of estimated fishing mortality in the fishery. See @fig-map for a map of the state areas."
+#| fig-cap: "Revenue-per-recruit as a function of fishing mortality rates for each state area, from Northern California (18, upper left) to the Canadian border (32, bottom right). The dotted vertical lines are at the low and high range of estimated fishing mortality in the fishery. See supplement for a map of the state areas."
 #| fig-dpi: 200
 
 rpr_by_area_summary |>
@@ -220,7 +197,7 @@ rpr_by_area_summary |>
 
 ```{r}
 #| label: fig-years
-#| fig-cap: "Revenue-per-recruit for different potential season opening dates based on estimated size-at-recruitment each year at low (0.03), average (0.1) and high (0.2) fishing mortality rates at the mean location."
+#| fig-cap: "Revenue-per-recruit for different potential season opening dates based on estimated size-at-recruitment each year at low (0.03 mo^-1^), average (0.1 mo^-1^) and high (0.2 mo^-1^) fishing mortality rates at the mean location."
 #| fig-height: 3.5
 #| fig-width: 6.5
 
@@ -256,7 +233,7 @@ rpr_by_yr_summary |>
 
 ```{r}
 #| label: fig-area-year
-#| fig-cap: "Revenue-per-recruit as a function of fishing mortality rates for the state areas with the smallest (32) and largest (19) size-at-recruitment and in the years with the smallest (2011) and largest (1991) sizes-at-recruitment coastwide. Dotted lines are at the low and high range of estimated fishing mortality in the fishery. See @fig-map for a map of state areas."
+#| fig-cap: "Revenue-per-recruit as a function of fishing mortality rates for the state areas with the smallest (32) and largest (19) size-at-recruitment and in the years with the smallest (2012) and largest (2020) sizes-at-recruitment coastwide. Dotted lines are at the low and high range of estimated fishing mortality in the fishery. See supplement for a map of state areas."
 
 rpr_st_summary |>
     mutate(area = paste('Area', area)) |>

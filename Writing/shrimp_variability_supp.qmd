@@ -47,6 +47,29 @@ calc_fitted_vals <- function(list_of_draws, y.mat, complete.data,
 ```
 
 ```{r}
+#| label: tbl-bioecon-model-pars
+#| tbl-cap: "Revenue-per-recruit model parameters"
+
+tibble(Symbol = c("$M_s$", "$M_w$", "$aL^b$", "$\\text{Price}=b_0+b_1\\text{CPP}$"),
+       Description = c("Summer natural mortality (Gallagher et al., 2004)",
+                       "Winter natural mortality (Gallagher et al., 2004)",
+                       "Weight-length relationship",
+                       "Price-count per pound relationship"),
+       Value = c('0.09 mo$^{-1}$',
+                 '0.06 mo$^{-1}$',
+                 '$a = 0.00126$, $b = 2.78$ for length in mm, weight in g',
+                 '$b_0=1.4390$ (\\$), $b_1 = -0.00387$ (\\$ lbs)')
+       ) |>
+  knitr::kable(escape = FALSE, align = c('l', 'l'))
+```
+
+{{< pagebreak >}}
+
+![Map of the state statistical areas for fishery and landings data along the U.S. west coast.](../figures/shrimp_areas.png){#fig-map width="4in"}
+
+{{< pagebreak >}}
+
+```{r}
 #| label: fig-lw-mod
 #| fig-cap: Length-weight data with fitted model
 
