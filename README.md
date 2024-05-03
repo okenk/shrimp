@@ -6,7 +6,7 @@ Oken, K.L., S.D. Groth, D.S. Holland, A.E. Punt, E.J. Ward (*in review*) Variabi
 
 -   CMSI_symposium_plots.R: presentation style figures used for several talks
 
--   consolidate_length_data.R: consolidate length data from annual spreadsheets in Data/shrimp_length_files and Data/allshrimp.xlsx into a single csv file used for growth model
+-   consolidate_length_data.R: consolidate length data from annual spreadsheets in Data/shrimp_length_files and Data/allshrimp.xlsx into a single csv file used for growth model. STEP 1 OF ANALYSIS
 
 -   growth_model.rds: potentially delete
 
@@ -14,23 +14,23 @@ Oken, K.L., S.D. Groth, D.S. Holland, A.E. Punt, E.J. Ward (*in review*) Variabi
 
 -   growth_model\_[description].stan: exploring variations on growth models. These did not pan out.
 
--   length_data_manip.R: preparing length data for growth model. STEP 1 OF ANALYSIS.
+-   length_data_manip.R: preparing length data for growth model. STEP 2 OF ANALYSIS.
 
 -   lengths_for_dan.R: reorganizing/summarizing data for Dan for 1) production function (abandoned) and 2) price - counter per pound relationship (used)
 
 -   model_result_processing.R: potentially delete. I think anything important has been moved into other files.
 
--   run_covariate_models.R: run growth model with and without covariates. STEP 2 OF ANALYSIS.
+-   run_covariate_models.R: run growth model with and without covariates. STEP 3 OF ANALYSIS.
 
--   YPR_modeling.R: run revenue-per-recruit model based on results of growth model. STEP 3 OF ANALYSIS.
+-   YPR_modeling.R: run revenue-per-recruit model based on results of growth model. STEP 4 OF ANALYSIS.
 
 ## Files in the Data folder
 
 -   shrimp_length_files: one spreadsheet for each year of mean length by area, month, age. Formatted generally consistently but very poorly.
 
--   Alldata.xlsx: "projected weight Bob" is based on sum of projwt from allshrimp file. bob-residual is projected weight Bob minus total weight. BCI is bob-residual divided by sample_ct. There appear to be some vessel-catch date combinations with more than one bulk sample, and I cannot find a unique identifier for the bulk samples. Otherwise I was generally able to recreate the residuals.
+-   Alldata.xlsx: "projected weight Bob" is based on sum of projwt from allshrimp file. bob-residual is projected weight Bob minus total weight. BCI is bob-residual divided by sample_ct. Ignored due to confidential information.
 
--   allshrimp.xlsx: rework tab has length, age, area, month, year, lots of other info, for each *individual* shrimp sampled (rather than average across each bulk port sample). projwt is the projected weight based on a length-weight relationship (source/equation?).
+-   allshrimp.xlsx: rework tab has length, age, area, month, year, lots of other info, for each *individual* shrimp sampled (rather than average across each bulk port sample). projwt is the projected weight based on a length-weight relationship. Ignored due to large file size and some confidential columns. Available upon request.
 
 -   BEUTI_monthly.csv, CUTI_monthly.csv: CUTI and BEUTI, downloaded from <https://oceanview.pfeg.noaa.gov/products/upwelling/cutibeuti> on 11/17/23.
 
