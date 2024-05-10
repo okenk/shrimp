@@ -10,7 +10,8 @@ Code/mcmc_run.RData
 *.pdf
 *.png
 Data/allshrimp.xlsx
-Data/alldata.xlsx
+Data/Alldata.xlsx
+Data/Kiva.xlsx
 *shrimp_tickets.csv
 *Dan_cpp.csv
 # MS tmp files
