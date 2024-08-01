@@ -166,7 +166,7 @@ rpr_base_summary |>
   ggplot() +
   geom_ribbon(aes(x = FF, ymin = low, ymax = high), 
               fill = PNWColors::pnw_palette('Shuksan2', 5)[1],
-              alpha = 0.1, 
+              alpha = 0.2, 
               data = ~ subset(., opening == 1)) +
   geom_line(aes(x = FF, y = mid, col = opening_fct, group = opening_fct)) +
   labs(x = 'F (1/mo)', y = 'Revenue per recruit', col = 'Opening date') +
@@ -180,11 +180,15 @@ rpr_base_summary |>
 
 ```{r}
 #| label: fig-areas
-#| fig-cap: "Revenue-per-recruit as a function of fishing mortality rates for each state area, from Northern California (18, upper left) to the Canadian border (32, bottom right). The dotted vertical lines are at the low and high range of estimated fishing mortality in the fishery. See supplement for a map of the state areas."
+#| fig-cap: "Revenue-per-recruit as a function of fishing mortality rates for each state area, from Northern California (18, upper left) to the Canadian border (32, bottom right). The dotted vertical lines are at the low and high range of estimated fishing mortality in the fishery. The uncertainty ribbon is the 95% credible interval, accounting for uncertainty from the growth model estimates, of the line for April 1 (status quo). See supplement for a map of the state areas."
 #| fig-dpi: 200
 
 rpr_by_area_summary |>
   ggplot() +
+  geom_ribbon(aes(x = FF, ymin = low, ymax = high), 
+              fill = PNWColors::pnw_palette('Shuksan2', 5)[1],
+              alpha = 0.2, 
+              data = ~ subset(., opening == 1)) +
   geom_line(aes(x = FF, y = mid, col = opening_fct, group = opening_fct)) +
   facet_wrap(~area) +
   labs(x = 'F (1/mo)', y = 'Revenue per recruit', col = 'Opening date') +
@@ -233,11 +237,15 @@ rpr_by_yr_summary |>
 
 ```{r}
 #| label: fig-area-year
-#| fig-cap: "Revenue-per-recruit as a function of fishing mortality rates for the state areas with the smallest (32) and largest (19) size-at-recruitment and in the years with the smallest (2012) and largest (2020) sizes-at-recruitment coastwide. Dotted lines are at the low and high range of estimated fishing mortality in the fishery. See supplement for a map of state areas."
+#| fig-cap: "Revenue-per-recruit as a function of fishing mortality rates for the state areas with the smallest (32) and largest (19) size-at-recruitment and in the years with the smallest (2012) and largest (2020) sizes-at-recruitment coastwide. Dotted lines are at the low and high range of estimated fishing mortality in the fishery. The uncertainty ribbon is the 95% credible interval, accounting for uncertainty from the growth model estimates, of the line for April 1 (status quo). See supplement for a map of state areas."
 
 rpr_st_summary |>
     mutate(area = paste('Area', area)) |>
   ggplot() +
+  geom_ribbon(aes(x = FF, ymin = low, ymax = high), 
+              fill = PNWColors::pnw_palette('Shuksan2', 5)[1],
+              alpha = 0.2, 
+              data = ~ subset(., opening == 1)) +
   geom_line(aes(x = FF, y = mid, col = opening_fct, group = opening_fct)) +
   facet_grid(cohort ~ area) +
   labs(x = 'F (1/mo)', y = 'Revenue per recruit', col = 'Opening date') +
@@ -266,6 +274,16 @@ mod_best_sum <- summary(mod_best,
                         probs = c(0.025, 0.5, 0.975))
 mod_best_sum$summary
 
-
+# max Rhat, min ESS across all parameters (including hierarchical ones)
+parameter_draws <- rstan::extract(object = mod, permuted = FALSE, pars = c('pred_vec', 'log_lik', 'y_pp', 'lp__'), 
+                                  include = FALSE)
+par_names <- dimnames(parameter_draws)[[3]]
+summary_long <- summary(mod, pars = par_names, probs = NULL)[[1]]
+# n_eff
+min(summary_long[,'n_eff'])
+rownames(summary_long)[which.min(summary_long[,'n_eff'])]
+# Rhat
+max(summary_long[,'Rhat'])
+rownames(summary_long)[which.max(summary_long[,'Rhat'])]
 ```
 

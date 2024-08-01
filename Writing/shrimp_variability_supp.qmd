@@ -7,6 +7,7 @@ crossref:
   fig-prefix: "Fig. S"
   tbl-title: "Table S"
   tbl-prefix: "Table S"
+bibliography: references.bib
 ---
 
 # Supplemental figures
@@ -119,7 +120,7 @@ yr.seq <- sort(unique(lengths$Year_Class))
 # Var3 is cohort
 N.count <- lengths |>
   group_by(Age_Month) |>
-  summarize(N = round(mean(N), 0))
+  summarize(N = round(mean(N, na.rm = TRUE), 0))
 
 reshape2::melt(list_of_draws$pro_dev,
                value.name = 'pro_dev') %>%
@@ -148,13 +149,66 @@ reshape2::melt(list_of_draws$pro_dev,
 
 ```
 
+# Assigning ages
+
+Ocean shrimp are aged using length-frequency analysis for each area-month-year distribution combined with biological understanding of the life history of shrimp according to Hannah and Jones [-@hannah1991]. Robust data from an intensive and long-term biological sampling program combined with the fast growth and short lives of ocean shrimp allows nadirs to be easily visually identified and used to assign age and identify modal length (Fig. S[-@fig-ageing]). Biologists have found that automated analysis such as MIX modal analysis, MULTIFAN and ELEFAN have key limitations and are not currently readily adaptable to the complicated life history of pandalid shrimp. For example, automated tools cannot handle the bifurcation of the size distribution of age 1 shrimp that occurs when there are a large proportion of primary females, as occurred during 2009. In this case, the distribution of age 1 shrimp late in the season, around September and October, is biomodal, with primary females growing to larger sizes since they will not be able to molt for many months. Automated tools are also ill-suited to handle the variable number of cohorts observed. For example, in September and October, there is often (though not always) a small mode for age 0 shrimp that are starting to settle into benthic habitats, but are not caught earlier during the fishing season. This subjective method used incorrectly ages some individuals, but any measure of central tendency of length-at-age (e.g., mode, mean) should be much more robust to these errors. Because our growth model uses mean length-at-age as the main data source (i.e., the red dots in Fig. S[-@fig-ageing]), we felt this ageing method was sufficient for our purposes. We acknowledge that the mean length-at-age for age 3 shrimp, which are less abundant in the catch than age 1 and 2 shrimp, are precise. We do not have reason to think the mean is consistently biased. In addition, while there are far fewer age 3 individuals, there are also fewer mean lengths for age 3 shrimp across all areas and years, particularly after the first two months of the fishing season when the age 3 mode is more apparent and boats tend to target older shrimp (Figs. S[-@fig-process-errs], S[-@fig-ageing]).
+
+```{r}
+#| label: fig-ageing
+#| fig-cap: "Length frequency histograms for two representative areas and years to validate age assignments. Red points are the average lengths of each year-month-area-age combination that are used in the growth model. Vertical dotted lines are either the applied breakpoint between adjacent ages or the minimum/maximum length for an age, if there are assumed to be no observations of older or younger individuals."
+#| fig-width: 7.5
+#| fig-height: 6
+#| cache: true
+
+# largest sample sizes: 21, 22, 26
+indiv_len <- readxl::read_excel('../Data/allshrimp.xlsx', sheet = 'rework')
+areas <- c(21:22)
+yrs <- 2008:2009
+
+avg_len <- lengths |>
+  filter(Year %in% yrs, Area %in% areas) |>
+  dplyr::mutate(Area = paste('Area', Area))
+
+breaks <- dplyr::filter(indiv_len, Year %in% yrs, Area %in% areas) |>
+  dplyr::group_by(MO., Year, Area, Age) |>
+  dplyr::summarise(min_len = min(CL),
+                   max_len = max(CL)) |>
+  dplyr::mutate(Area = paste('Area', Area)) |>
+  tidyr::pivot_wider(names_from = Age, values_from = c(min_len, max_len)) |>
+  dplyr::group_by(MO., Year, Area) |>
+  # filter(Area == 'Area 22', Year == 2010) |>
+  dplyr::mutate(`1` = mean(c(max_len_0, min_len_1), na.rm = TRUE),
+                `2` = mean(c(max_len_1, min_len_2), na.rm = TRUE),
+                `3` = mean(c(max_len_2, min_len_3), na.rm = TRUE),
+                `4` = max_len_3) |>
+  dplyr::select(MO., Year, Area, `1`, `2`, `3`, `4`) |>
+  tidyr::pivot_longer(`1`:`4`, names_to = 'age_break', values_to = 'CL') |>
+  dplyr::filter(!is.na(age_break))
+
+indiv_len |> 
+  # dplyr::count(Area)
+  dplyr::filter(Year %in% yrs, Area %in% areas) |>
+  dplyr::mutate(Area = paste('Area', Area)) |>
+  ggplot() +
+  ggridges::geom_density_ridges(aes(x = CL, y = MO., group = MO.), scale = 1, 
+                                stat = 'binline', bins = 25) +
+  geom_point(aes(x = Avg_Len, y = Month_Num - 0.25), col = 'red', data = avg_len) +
+  geom_linerange(aes(x = CL, ymin = MO.-0.9, ymax = MO.), data = breaks, linetype = 'dotted') +
+  facet_grid(Year ~ Area) +
+  scale_y_reverse(breaks = 2*2:5, labels = c('Apr', 'Jun', 'Aug', 'Oct'), name = 'Month') +
+  xlab('Carapace length (mm)')
+
+
+
+```
+
 # Price model
 
-The price per pound for ocean shrimp (*Pandalus jordani*) landed in Oregon varies substantially from year to year without any clear seasonal or annual trends. Modeling the expected absolute price of ocean shrimp accurately would be extremely challenging and is beyond the scope of this study. Our primary interest here is to understand whether and how price varies with the size of shrimp as measured by count per pound. Prices tend to increase with size of the shrimp which is an important consideration when modeling revenue per recruit as a function of fishing mortality since maximum revenue per recruit will be achieved at relatively lower mortality levels when price increases with size relative to an assumption of constant price.
+The price per pound for ocean shrimp (*Pandalus jordani*) landed in Oregon varies substantially from year to year without any clear seasonal or annual trends. Modeling the expected absolute price of ocean shrimp accurately would be extremely challenging and is beyond the scope of this study. Our primary interest here is to understand whether and how price varies with the size of shrimp as measured by count per pound. Prices tend to increase with size of the shrimp which is an important consideration when modeling revenue per recruit as a function of fishing mortality since maximum revenue-per-recruit will be achieved at relatively lower mortality levels when price increases with size relative to an assumption of constant price.
 
-We fit price models to data from fish tickets in PacFIN (Pacific Fishery Information Network; https://pacfin.psmfc.org/) between 2017-2020 that could be matched with ODFW biological port sampling data on count count per pound. Because prices are highly variable year-to-year and month-to-month without any clear trends, we use a fixed effect model with fixed effects for each year-month combination in the data. This allows us to isolate the effect of count per pound on price. We tried a number of different specifications including taking natural logs of price or count per pound or both. They all yield fairly similar relationships between count per pound and price (@fig-price-mod1) with little appreciable difference in how price changes. For simplicity, in our bioeconomic model, we use the simplest linear model formulation with both the dependent variable (price) and the explanatory variable (count per pound) untransformed and fixed effects or year-month combinations.
+We fit price models to data from fish tickets in the PacFIN (Pacific Fishery Information Network; https://pacfin.psmfc.org/) database between 2017-2020 that could be matched with ODFW biological port sampling data on count count per pound. Because prices are highly variable year-to-year and month-to-month without any clear trends, we use a fixed effect model with fixed effects for each year-month combination in the data. This allowed us to isolate the effect of count-per-pound on price. We tried several different specifications including taking natural logs of price or count-per-pound or both. The candidate models all yield fairly similar relationships between count-per-pound and price (@fig-price-mod1) with little appreciable difference in how price changes. For simplicity, in our bioeconomic model, we use the simplest linear model formulation with both the dependent variable (price) and the explanatory variable (count-per-pound) untransformed and fixed effects for year-month combinations.
 
-The overall fit and predictive power of the model are poor, but the relationship between count per pound and price is statistically significant (p=0.001) (@tbl-price-mod) and is robust to the specification (@fig-price-mod1). As expected, count per pound did have a negative effect on price, reducing price per pound by around 20% over the range of commonly landed sizes (@fig-price-mod2).
+The overall fit and predictive power of the model are poor, but the relationship between count-per-pound and price is statistically significant (*p*=0.001) (Table S[-@tbl-price-mod]) and is robust to the specification (@fig-price-mod1). As expected, count-per-pound had a negative effect on price, reducing price-per-pound by around 20% over the range of commonly landed sizes (Fig. S[-@fig-price-mod2]).
 
 ```{r}
 #| label: tbl-price-mod
@@ -174,6 +228,8 @@ tibble::tibble(Variable = c('Count per pound', 'Constant', '$\\sigma_u$',
                              '95% Conf. Int.'))
 ```
 
-![Predicted prices as a function of count per pound with different specifications](../figures/price_model1.png){#fig-price-mod1}
+![Predicted prices as a function of count-per-pound with different specifications](../figures/price_model1.png){#fig-price-mod1}
 
-![Frequency distribution of count per pound for observations used in price model](../figures/price_model2.png){#fig-price-mod2}
+![Frequency distribution of count-per-pound for observations used in price model](../figures/price_model2.png){#fig-price-mod2}
+
+# Literature cited
