@@ -1,6 +1,11 @@
+<!-- badges: start -->
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13362802.svg)](https://doi.org/10.5281/zenodo.13362802)
+<!-- badges: end -->
+
 This respository contains non-confidential data, code, and manuscript text for:
 
-Oken, K.L., S.D. Groth, D.S. Holland, A.E. Punt, E.J. Ward (*in review*) Variability in somatic growth over time and space determines optimal season-opening date in the Oregon ocean shrimp (*Pandalus jordani*) fishery. *CJFAS*
+Oken, K.L., S.D. Groth, D.S. Holland, A.E. Punt, E.J. Ward (*accepted*) Variability in somatic growth over time and space determines optimal season-opening date in the Oregon ocean shrimp (*Pandalus jordani*) fishery. *CJFAS*
 
 ## Files in Code folder
 
