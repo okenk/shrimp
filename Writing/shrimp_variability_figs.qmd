@@ -65,7 +65,7 @@ tibble(Symbol = c('Indices',
 
 ```{r}
 #| label: tbl-mod-est
-#| tbl-cap: Estimates of global (non-hierarchical) parameters for the base model (no environmental covariates). Mean is the posterior mean, sd is the standard deviation of the parameter estimate, n_eff is effective number of MCMC draws, 2.5% and 97.5% cover the 95% credible interval of the parameter, 50% is the posterior median, and Rhat is a convergence diagnostic that compares variability within and among chains and should be close to one. See @tbl-mod-variables for description of variables.
+#| tbl-cap: Estimates of global (non-hierarchical) parameters for the base model (no environmental covariates). Mean is the posterior mean, sd is the standard deviation of the parameter estimate, n_eff is effective number of MCMC draws, 2.5% and 97.5% cover the 95% credible interval of the parameter, 50% is the posterior median, and $\hat{R}$ is a convergence diagnostic that compares variability within and among chains and should be close to one. See @tbl-mod-variables for description of variables.
 #| cache: true
 
 to_summarize_ind <- sapply(mod@par_dims, \(x) length(x)==0) & 
@@ -86,7 +86,7 @@ bind_cols(Variable = rownames(mod_sum$summary), mod_sum$summary) |>
                               Variable == 'U_season' ~ '$\\alpha_s$',
                               Variable == 'sigma_process' ~ '$\\sigma_p$',
                               Variable == 'sigma_obs' ~ '$\\sigma_o$')) |>
-  select(-se_mean) |>
+  select(-se_mean, `$\\hat{R}$` = Rhat) |>
   knitr::kable(digits = 3)
 ```
 
