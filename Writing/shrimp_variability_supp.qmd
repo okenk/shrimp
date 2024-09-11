@@ -66,7 +66,7 @@ tibble(Symbol = c("$M_s$", "$M_w$", "$aL^b$", "$\\text{Price}=b_0+b_1\\text{CPP}
 
 {{< pagebreak >}}
 
-![Map of the state statistical areas for fishery and landings data along the U.S. west coast.](../figures/shrimp_areas.png){#fig-map width="4in"}
+![Map of the state statistical areas for fishery and landings data along the U.S. west coast.](../figures/shrimp_areas.jpg){#fig-map width="4in"}
 
 {{< pagebreak >}}
 
